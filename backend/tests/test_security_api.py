@@ -24,7 +24,7 @@ PID = "0" * 32
 @pytest.fixture()
 def core(tmp_path, origin):
     pol = make_policy([origin], {"media.example.com": ["127.0.0.1"], "evil.example.com": ["127.0.0.1"]})
-    c = Core(Settings().with_(data_dir=tmp_path / "data", admin_port=8788, create_wait_s=5.0), pol).start()
+    c = Core(Settings().with_(data_dir=tmp_path / "data", admin_port=8788, create_wait_s=5.0, admin_token="test-admin-token"), pol).start()
     yield c
     c.stop()
 
@@ -44,6 +44,8 @@ async def req(core, method, path, token=None, client=LAN_CLIENT, admin=False, **
     app = create_admin_app(core) if admin else create_api_app(core)
     base = "http://127.0.0.1:8788" if admin else BASE
     headers = kw.pop("headers", {})
+    if admin:
+        headers.setdefault("X-OpenSeek-Admin", "test-admin-token")      # every admin call needs the per-install secret
     if token:
         headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app, client=client), base_url=base) as c:
@@ -96,7 +98,7 @@ def test_bad_token_401(core, token):
 
 def test_revoked_token_401(core, token):
     assert call(core, "DELETE", f"/admin/devices/{token[1]}", admin=True, client=("127.0.0.1", 1),
-                headers={"X-OpenSeek-Admin": "1"}).status_code == 204
+                headers={"X-OpenSeek-Admin": "test-admin-token"}).status_code == 204
     assert call(core, "GET", "/v1/pair/status", token=token[0]).status_code == 401
 
 
@@ -110,7 +112,7 @@ def test_pairing_over_api(core):
     assert call(core, "POST", "/v1/pair/claim",
                 json={"pair_id": "0" * 32, "device_name": "x", "client_proof": "0" * 64}).status_code == 403
     code = call(core, "POST", "/admin/pair", admin=True, client=("127.0.0.1", 1),
-                headers={"X-OpenSeek-Admin": "1"}).json()["code"]
+                headers={"X-OpenSeek-Admin": "test-admin-token"}).json()["code"]
     assert re.fullmatch(r"[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}", code)
     assert call(core, "GET", "/v1/health").json()["pairing_open"] is True
     st = call(core, "POST", "/v1/pair/start", json={}).json()
@@ -231,7 +233,7 @@ def test_jobs_reject_url_in_query(core, token, origin):
 
 def test_job_flood_429(tmp_path, origin):
     pol = make_policy([origin], {"media.example.com": ["127.0.0.1"]})
-    c = Core(Settings().with_(data_dir=tmp_path / "d", max_active_sources=1, pregen="full"), pol).start()
+    c = Core(Settings().with_(data_dir=tmp_path / "d", max_active_sources=1, pregen="full", admin_token="test-admin-token"), pol).start()
     try:
         toks = []
         for i in range(2):
@@ -284,7 +286,7 @@ def test_public_client_ip_refused(core, token, tmp_path, origin):
                "::ffff:192.168.1.9"):
         assert call(core, "GET", "/v1/health", client=(ip, 1)).status_code == 200, ip
     pol = make_policy([origin], {})
-    c2 = Core(Settings().with_(data_dir=tmp_path / "pub", allow_public_clients=True), pol).start()
+    c2 = Core(Settings().with_(data_dir=tmp_path / "pub", allow_public_clients=True, admin_token="test-admin-token"), pol).start()
     try:
         assert call(c2, "GET", "/v1/health", client=("8.8.8.8", 1)).status_code == 200
     finally:
@@ -294,10 +296,11 @@ def test_public_client_ip_refused(core, token, tmp_path, origin):
 def test_admin_guard(core):
     ok = dict(admin=True, client=("127.0.0.1", 1))
     assert call(core, "GET", "/admin/status", **ok).status_code == 200
-    assert call(core, "POST", "/admin/pair", **ok).json() == {"error": "csrf"}
-    assert call(core, "POST", "/admin/pair", headers={"X-OpenSeek-Admin": "1", "Host": "evil.example:8788"},
+    assert call(core, "POST", "/admin/pair", headers={"X-OpenSeek-Admin": ""}, **ok).json() == {"error": "admin_auth"}      # no secret
+    assert call(core, "GET", "/admin/status", headers={"X-OpenSeek-Admin": "wrong-secret-value"}, **ok).json() == {"error": "admin_auth"}
+    assert call(core, "POST", "/admin/pair", headers={"X-OpenSeek-Admin": "test-admin-token", "Host": "evil.example:8788"},
                 **ok).json() == {"error": "bad_host"}                             # DNS rebinding
-    assert call(core, "POST", "/admin/pair", headers={"X-OpenSeek-Admin": "1", "Origin": "https://evil.example"},
+    assert call(core, "POST", "/admin/pair", headers={"X-OpenSeek-Admin": "test-admin-token", "Origin": "https://evil.example"},
                 **ok).json() == {"error": "bad_origin"}
     assert call(core, "GET", "/admin/status", admin=True, client=("192.168.1.5", 1)).status_code == 403
     st = call(core, "GET", "/admin/status", **ok).json()

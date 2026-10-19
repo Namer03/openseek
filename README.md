@@ -60,7 +60,7 @@ Windows (PowerShell):
 ```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install -r requirements.txt -c requirements-lock.txt
 $env:OPENSEEK_DATA_DIR = "$env:LOCALAPPDATA\OpenSeek\data"
 .venv\Scripts\python -m openseek serve
 ```
@@ -69,7 +69,7 @@ Linux:
 
 ```sh
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -c requirements-lock.txt
 OPENSEEK_DATA_DIR=$HOME/.local/share/openseek .venv/bin/python -m openseek serve
 ```
 
@@ -92,7 +92,8 @@ All settings are environment variables read at start-up. Invalid values stop the
 |---|---|---|
 | `OPENSEEK_DATA_DIR` | `data` | Database, secret key, TLS identity, cache |
 | `OPENSEEK_HOST` / `OPENSEEK_PORT` | `0.0.0.0` / `8787` | HTTPS API listener |
-| `OPENSEEK_ADMIN_PORT` | `8788` | Admin listener, always bound to 127.0.0.1 |
+| `OPENSEEK_ADMIN_PORT` | `8788` | Admin listener, always bound to 127.0.0.1; every call except the dashboard page needs the admin secret |
+| `OPENSEEK_ADMIN_TOKEN` | random, in `<data>/admin.token` | Optional explicit admin secret (at least 16 characters). Normally leave unset |
 | `OPENSEEK_PUBLIC_PORT` | `0` (off) | Internet-facing guest listener; must differ from the other ports |
 | `OPENSEEK_PUBLIC_BIND` | `0.0.0.0` | Bind address of the guest listener |
 | `OPENSEEK_PUBLIC_HOST` | empty | `name.example.org:443`, advertised in invitations and capability URLs |

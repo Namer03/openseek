@@ -177,7 +177,7 @@ def test_two_nuvio_identities_share_one_cached_title_end_to_end(rig, cli):
             assert origin.file_requests == reqs and len(srv.core.jobs.sources) == nsrc and len(srv.core.jobs.jobs) == njobs
 
             # revocation: the next request fails for B, and so does the URL it already held; A (same owner) unaffected
-            assert adm.delete(f"/admin/devices/{b['device']}", headers={"X-OpenSeek-Admin": "1"}).status_code == 204
+            assert adm.delete(f"/admin/devices/{b['device']}", headers={"X-OpenSeek-Admin": "test-admin-token"}).status_code == 204
             assert lookup(srv, cli, gb, "tt1856101", dur).status_code == 401
             with anon(srv) as plain:
                 assert plain.get(mb["vtt"]).status_code == 403
@@ -231,7 +231,7 @@ def test_two_nuvio_identities_through_the_public_listener(live_factory, cli):
                 assert [l for l in moved.text.splitlines() if "-->" in l][1] != first
                 assert gb.post("/v1/previews", json={"source": {"url": _url(o, "other_10min.mkv")}, "layout": "tiles"}).status_code == 404
                 assert o.file_requests == reqs and len(srv.core.jobs.jobs) == njobs
-                assert adm.delete(f"/admin/devices/{b['device']}", headers={"X-OpenSeek-Admin": "1"}).status_code == 204
+                assert adm.delete(f"/admin/devices/{b['device']}", headers={"X-OpenSeek-Admin": "test-admin-token"}).status_code == 204
                 assert look(gb).status_code == 401
                 assert look(ga).status_code == 200
     finally:

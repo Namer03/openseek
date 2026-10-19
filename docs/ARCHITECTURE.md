@@ -9,7 +9,7 @@ as WebVTT cues and tile sheets. The HTTP API is specified in `api/CONTRACT-v1.md
 | Listener | Default | Who | Notes |
 |---|---|---|---|
 | Owner API | HTTPS `0.0.0.0:8787` | paired owner devices | self-signed ECDSA P-256 certificate; client IPs must be private unless `OPENSEEK_ALLOW_PUBLIC_CLIENTS=1` |
-| Admin | HTTP `127.0.0.1:8788` | the owner (CLI, dashboard, desktop app) | loopback only; rejects foreign Host/Origin; state-changing calls need `X-OpenSeek-Admin: 1` |
+| Admin | HTTP `127.0.0.1:8788` | the owner (CLI, dashboard, desktop app) | loopback only; rejects foreign Host/Origin; every call except the static dashboard page needs the per-install admin secret in `X-OpenSeek-Admin` |
 | Guest (public) | HTTPS, off unless `OPENSEEK_PUBLIC_PORT` is set | invited guest devices only | same certificate and pin, deny-by-default routes, per-address limits |
 
 ## Modules (`backend/openseek/`)

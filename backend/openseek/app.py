@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import hmac
 import json
 import logging
 import os
@@ -29,7 +30,7 @@ from .library import Library, clean_ids
 from .pairing import InviteManager
 from .altpipeline import AltMeta
 from .altsource import Candidate
-from .auth import CapSigner, DeviceAuth, load_or_create_secret
+from .auth import CapSigner, DeviceAuth, admin_token, load_or_create_secret
 from .cache import Cache, secure_mkdir
 from .config import Settings
 from .db import DB
@@ -70,6 +71,7 @@ class Core:
         self.cache = Cache(self.data_dir, self.db, settings.cache_max_bytes, settings.retention_days)
         self.cert_path, self.key_path, self.spki_pin = ensure_certificate(self.data_dir)
         self.caps = CapSigner(load_or_create_secret(self.data_dir / "secret.key"))
+        self.admin_token = admin_token(self.data_dir, settings.admin_token)
         self.auth = DeviceAuth(self.db)
         self.invites = InviteManager(self.db, self.spki_pin, self.auth.register)
         self.pairing = PairingManager(self.spki_pin, self.auth.register, invites=self.invites)
@@ -305,8 +307,11 @@ class Guard:
         origin = headers.get("origin")
         if origin is not None and origin not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
             return "bad_origin"
-        if scope["method"] not in ("GET", "HEAD") and headers.get("x-openseek-admin") != "1":
-            return "csrf"                     # custom header => no simple cross-site request
+        if scope["method"] == "GET" and scope.get("path") == "/":
+            return None                       # the static dashboard shell: no data, no secret; its script gets the token from the URL fragment
+        given = headers.get("x-openseek-admin", "")
+        if not hmac.compare_digest(given.encode("utf-8", "replace"), self.core.admin_token.encode("utf-8")):
+            return "admin_auth"               # every other admin call needs the per-install secret (also stops CSRF: a custom header)
         return None
 
 
@@ -848,14 +853,16 @@ table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3em .6em}.co
 letter-spacing:.15em;font-family:monospace}button{font-size:1em;margin:.2em}</style></head><body>
 <h1>OpenSeek</h1><div id=s>loading…</div>
 <script>
-const H={'X-OpenSeek-Admin':'1'};
+const T=(location.hash||'').slice(1)||sessionStorage.getItem('osk')||'';if(T)sessionStorage.setItem('osk',T);history.replaceState(null,'',location.pathname);
+const H={'X-OpenSeek-Admin':T};
 function esc(t){return String(t).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';')}
 async function act(m,u){await fetch(u,{method:m,headers:H});load()}
 async function sharing(on){await fetch('/admin/sharing',{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},H),body:JSON.stringify({enabled:on})});load()}
 async function meta(on){await fetch('/admin/library',{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},H),body:JSON.stringify({metadata_index:on})});load()}
 async function mkinvite(){const r=await fetch('/admin/invites',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},H),body:JSON.stringify({public:!!window.pubOn})});
 const j=await r.json();window.lastInvite=r.ok?('Server '+j.address+' - code '+j.code+' (valid '+Math.round(j.expires_in_s/3600)+' h, one use). Join string: '+j.join):'Could not create: '+j.error;load()}
-async function load(){const r=await (await fetch('/admin/status')).json();let h='';
+async function load(){if(!T){document.getElementById('s').textContent='Open this page with: python -m openseek dashboard';return}
+const r=await (await fetch('/admin/status',{headers:H})).json();let h='';
 h+='<h2>Server</h2><p>API port <code>'+esc(r.server.port)+'</code>, addresses: <code>'+esc(r.server.addresses.join(', '))+
 '</code><br>Pin: <code>'+esc(r.server.spki_pin)+'</code></p><h2>Pairing</h2>';
 if(r.pairing.open){h+='<p class=code>'+esc(r.pairing.code)+'</p><p>expires in '+esc(r.pairing.expires_in_s)+
@@ -866,7 +873,7 @@ h+='<h2>Devices</h2><table><tr><th>id</th><th>name</th><th></th></tr>';
 for(const d of r.devices){h+='<tr><td><code>'+esc(d.device_id)+'</code></td><td>'+esc(d.name)+
 '</td><td><button onclick="act(\\'DELETE\\',\\'/admin/devices/'+esc(d.device_id)+'\\')">Revoke</button></td></tr>'}
 h+='</table>';
-const sh=await (await fetch('/admin/sharing')).json();
+const sh=await (await fetch('/admin/sharing',{headers:H})).json();
 h+='<h2>Sharing</h2><p>Sharing is <b>'+(sh.enabled?'ON':'OFF')+'</b> <button onclick="sharing('+(sh.enabled?'false':'true')+')">Turn '+(sh.enabled?'off':'on')+
 '</button> &nbsp; Title index (ids only) is <b>'+(sh.metadata_index?'ON':'OFF')+'</b> <button onclick="meta('+(sh.metadata_index?'false':'true')+')">Turn '+(sh.metadata_index?'off':'on')+'</button></p>';
 window.pubOn=!!(sh.public&&sh.public.listening&&sh.public.host);if(sh.enabled){h+='<button onclick="mkinvite()">Create invitation'+(window.pubOn?' (public: '+esc(sh.public.host)+')':' (LAN)')+'</button> <span id=inv>'+esc(window.lastInvite||'')+'</span><table><tr><th>invitation</th><th>state</th><th>expires in</th><th></th></tr>';
@@ -1202,6 +1209,10 @@ def serve(settings: Settings) -> None:
         servers.append(uvicorn.Server(pub_cfg))
         log.info("PUBLIC guest listener: %s:%d (advertised as %s)", settings.public_bind, settings.public_port,
                  settings.public_host or "(no public host set)", extra=plain())
+    from .hardening import CONTAINER_WARNING, check_data_dir, running_in_container
+    check_data_dir(core.data_dir, log.warning)
+    if running_in_container():
+        log.warning(CONTAINER_WARNING)
     log_banner(core)
 
     async def main():

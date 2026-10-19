@@ -21,7 +21,17 @@ APP = "OpenSeekDesktop"
 APPDATA = Path(os.environ.get("APPDATA", str(Path.home()))) / APP
 APPDATA.mkdir(parents=True, exist_ok=True)
 CONFIG_PATH = APPDATA / "config.json"
-ADMIN_HDR = {"X-OpenSeek-Admin": "1"}
+
+
+def admin_headers(data_dir: str) -> dict:
+    """The server's per-install admin secret: OPENSEEK_ADMIN_TOKEN, else <data>/admin.token (owner-only file)."""
+    tok = os.environ.get("OPENSEEK_ADMIN_TOKEN", "")
+    if not tok:
+        try:
+            tok = (Path(data_dir) / "admin.token").read_bytes().hex()
+        except OSError:
+            tok = ""
+    return {"X-OpenSeek-Admin": tok}
 
 
 # --------------------------------------------------------------------------------------------- configuration
@@ -74,7 +84,7 @@ class Admin:
         self.cfg = cfg
 
     def _client(self) -> httpx.Client:
-        return httpx.Client(base_url=f"http://127.0.0.1:{self.cfg.admin_port}", headers=ADMIN_HDR, timeout=4.0)
+        return httpx.Client(base_url=f"http://127.0.0.1:{self.cfg.admin_port}", headers=admin_headers(self.cfg.data_dir), timeout=4.0)
 
     def call(self, method: str, path: str, json_body=None):
         try:

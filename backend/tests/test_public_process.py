@@ -16,14 +16,14 @@ from helpers import free_port
 from openseek import pairing
 
 BACKEND = Path(__file__).resolve().parent.parent
-ADMIN = {"X-OpenSeek-Admin": "1"}
+ADMIN = {"X-OpenSeek-Admin": "test-admin-token"}
 
 
 def start(data: Path, api: int, admin: int, public: int | None, tag: str):
     env = dict(os.environ)
     for k in [k for k in env if k.startswith("OPENSEEK_")]:
         del env[k]
-    env.update(OPENSEEK_DATA_DIR=str(data), OPENSEEK_HOST="127.0.0.1", OPENSEEK_PORT=str(api), OPENSEEK_ADMIN_PORT=str(admin))
+    env.update(OPENSEEK_DATA_DIR=str(data), OPENSEEK_HOST="127.0.0.1", OPENSEEK_PORT=str(api), OPENSEEK_ADMIN_PORT=str(admin), OPENSEEK_ADMIN_TOKEN="test-admin-token")
     if public:
         env.update(OPENSEEK_PUBLIC_PORT=str(public), OPENSEEK_PUBLIC_BIND="127.0.0.1", OPENSEEK_PUBLIC_HOST=f"127.0.0.1:{public}")
     out, err = data / f"{tag}.out.log", data / f"{tag}.err.log"

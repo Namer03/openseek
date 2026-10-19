@@ -18,7 +18,7 @@ from test_scenarios import _register
 
 from helpers import FIXTURES as ALT, FIXTURES_HINT
 needs_fixture = pytest.mark.skipif(not (ALT / "ok_10min.mkv").exists(), reason=FIXTURES_HINT)
-ADMIN = {"X-OpenSeek-Admin": "1"}
+ADMIN = {"X-OpenSeek-Admin": "test-admin-token"}
 HINTS = {"imdb_id": "tt1856101", "season": 0, "episode": 0}
 
 

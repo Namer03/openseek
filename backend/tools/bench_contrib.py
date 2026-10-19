@@ -24,7 +24,7 @@ from openseek import pairing  # noqa: E402
 
 URL = sys.argv[1] if len(sys.argv) > 1 else "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4"
 ROUNDS = int(sys.argv[2]) if len(sys.argv) > 2 else 2
-ADMIN = {"X-OpenSeek-Admin": "1"}
+ADMIN = {"X-OpenSeek-Admin": "test-admin-token"}
 
 
 def free_port() -> int:
@@ -43,7 +43,7 @@ def main() -> int:
                # the settings of the real production service (tools/run_production.ps1)
                OPENSEEK_BG_MBPS="64", OPENSEEK_PREGEN="full", OPENSEEK_TOLERANCE_S="5", OPENSEEK_UPSTREAM_RPS="3",
                OPENSEEK_WORKERS_PER_SOURCE="2", OPENSEEK_MULTIRANGE_PREFETCH="1", OPENSEEK_MULTIRANGE_BATCH="8",
-               OPENSEEK_PLAYBACK_GUARD="1")
+               OPENSEEK_PLAYBACK_GUARD="1", OPENSEEK_ADMIN_TOKEN="test-admin-token")
     p = subprocess.Popen([sys.executable, "-m", "openseek", "serve"], cwd=Path(__file__).resolve().parent.parent, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

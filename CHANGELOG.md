@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Security
+* The loopback admin API now requires a per-install secret (`<data>/admin.token` or `OPENSEEK_ADMIN_TOKEN`) on every call except the static dashboard page; new `python -m openseek dashboard`. Previously any local process could pair itself as owner.
+* Contributions can no longer overwrite the title ids of an existing cache entry.
+* Upstream reads abandon slow-drip sources (wall-clock throughput floor); absurd `Content-Range` totals are rejected.
+* The decoder is opened with an empty FFmpeg protocol whitelist; the inbound TLS 1.2 floor is pinned by a test.
+* Start-up warnings for a Windows data directory readable by other local users and for running in a container.
+* Docker base image pinned by digest; `requirements-lock.txt` pins the full runtime dependency closure.
+* See `docs/security/PRE-RELEASE-REVIEW.md` for the review, the remaining open items and what could not be tested.
+
 ## [0.1.0] - Initial public release
 
 ### Added

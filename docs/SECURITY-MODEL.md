@@ -18,7 +18,8 @@ reference scripts are in `docs/security/poc/`.
 ## Listeners and exposure
 
 * Owner API (8787): HTTPS. By default it refuses client addresses that are not private or loopback (`X-Forwarded-For` is not trusted). Do not forward it from your router.
-* Admin (8788): bound to 127.0.0.1; foreign Host or Origin headers are rejected (DNS rebinding) and state-changing calls need `X-OpenSeek-Admin: 1`.
+* Admin (8788): bound to 127.0.0.1; foreign Host or Origin headers are rejected (DNS rebinding) and every call except the static dashboard page needs the per-install admin secret in `X-OpenSeek-Admin`
+  (random, kept in `<data>/admin.token`, or `OPENSEEK_ADMIN_TOKEN`). Without it, any local process, other local user or container that can reach the host's loopback could pair itself as the owner. The dashboard receives the secret in the URL fragment, which browsers never send to the server.
 * Guest listener (off by default): exact method+path allow-list, everything else a uniform 404. Owner tokens are refused on it. Per-address limits (per minute: health 30, pairing 12,
   guest API 300, capability URLs 900, unknown routes 30); 20 refused requests in 10 minutes block an address for 15 minutes. Capability URLs are built from `OPENSEEK_PUBLIC_HOST`, not from client headers.
   It shares a process with the extractor, so a flood could slow it; the listener caps concurrency at 64 connections.
@@ -74,6 +75,9 @@ There is no telemetry, update check or other outbound connection except media fe
 * Pairing is not a PAKE (see above); the upgrade path would be CPace.
 * The decoder libraries remain a large native attack surface; containment is process separation and limits, not elimination.
 * A compromised paired device can make the server fetch any public URL within quotas.
+* Behind Docker Desktop's NAT, or behind any reverse proxy or sidecar, every client appears with a private address, so the owner API's "private clients only" check cannot protect a port you publish. The published address is then the only access control (see `INSTALL.md`).
+* Pairing windows are burned by five wrong proofs in total, from any source: someone on your LAN (or anyone who can reach a wrongly published port) can repeatedly burn the window and prevent pairing. This is availability only; guessing the code is not feasible (8 symbols, 5 tries). `/v1/health` reports whether a window is open.
+* On Windows the server does not itself set file ACLs. Under the default data directory (`%LOCALAPPDATA%\OpenSeek\data`) the profile's permissions protect the TLS key, `secret.key`, `admin.token` and the database; a data directory placed elsewhere may be readable by other local users. The server warns at start-up when it can tell.
 * The guest listener cannot distinguish clients behind one NAT; blocks apply per address. A guest can learn whether a title is cached by looking it up. A live 4-character invitation tag is distinguishable from an unknown one.
 * The owner API builds the capability URLs it returns from the request's `Host` header (a syntactically valid host name only). Only the authenticated client that made the request sees that URL, and the capability itself is bound to the device and preview, not to the host; behind a reverse proxy, make sure it forwards a trustworthy `Host`. The guest listener uses `OPENSEEK_PUBLIC_HOST` instead.
 * Uvicorn has no header-read timeout; slow connections hold a slot until the OS drops them.
@@ -83,7 +87,7 @@ There is no telemetry, update check or other outbound connection except media fe
 
 ## Verification status
 
-Checked against the code and the automated tests (455 backend tests passing, 4 skipped, on a clean checkout): the guest-listener limits and block timings, pairing parameters (window, 5-proof burn, alphabet, 256-bit tokens,
+Checked against the code and the automated tests (the full backend suite on a clean checkout, plus regression tests for the findings in `security/PRE-RELEASE-REVIEW.md`): the guest-listener limits and block timings, pairing parameters (window, 5-proof burn, alphabet, 256-bit tokens,
 constant-time comparisons), capability lifetime (at most 6 hours), invitation lifetimes (10 minutes to 7 days), the SSRF policy constants (ports, 5 redirects, 16 KiB bodies, header allow-list), the contribution rate (6 per
 minute per device), the worker environment and priority, and the "no outbound connection when idle" and "logs and disk are redacted" tests.
 

@@ -69,6 +69,7 @@ class Settings:
     alt_hold_after_reject: bool = False    # after a rejected candidate wait for a release before offering the next
     alt_report_names: bool = False         # release names in the loopback diagnostics (never persisted by the server)
     alt_skip_names: str = ""               # comma-separated release-name fragments never offered (experiments)
+    admin_token: str = ""                  # secret the loopback admin API requires (empty: a random one in <data>/admin.token)
     capture_source_file: str = ""          # diagnostics: write the playback source's resolved CDN link here after preflight
     multirange_prefetch: bool = False      # EXPERIMENTAL: fetch several keyframe windows per request (multipart/byteranges)
     multirange_batch: int = 8              # windows per multi-range request (2..16)
@@ -141,6 +142,7 @@ class Settings:
             "MULTIRANGE_PREFETCH": ("multirange_prefetch", _bool),
             "MULTIRANGE_BATCH": ("multirange_batch", int),
             "CAPTURE_SOURCE_FILE": ("capture_source_file", str),
+            "ADMIN_TOKEN": ("admin_token", str),
             "ALT_SKIP_NAMES": ("alt_skip_names", str),
             "ALT_SHARED_CAPS": ("alt_shared_caps", _bool),
             "ALT_HOLD_AFTER_REJECT": ("alt_hold_after_reject", _bool),

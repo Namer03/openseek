@@ -109,3 +109,82 @@ def test_inbound_tls_context_refuses_anything_below_tls_1_2():
     ctx = ssl.SSLContext(cfg.ssl_version)                                 # the protocol uvicorn would use for the listeners
     assert ctx.minimum_version >= ssl.TLSVersion.TLSv1_2
     assert ctx.minimum_version != ssl.TLSVersion.MINIMUM_SUPPORTED
+
+
+# ---- the loopback admin API needs a per-install secret (review finding: any local process could pair itself as owner)
+def _admin_call(srv, method, path, token=None, **kw):
+    import httpx
+    h = {"X-OpenSeek-Admin": token} if token is not None else {}
+    return httpx.request(method, f"{srv.admin}{path}", headers=h, timeout=10, **kw)
+
+
+def test_admin_api_refuses_every_call_without_the_secret(live_factory):
+    srv = live_factory(None)
+    for method, path in (("GET", "/admin/status"), ("GET", "/admin/devices"), ("POST", "/admin/pair"),
+                         ("PUT", "/admin/sharing"), ("DELETE", "/admin/pair")):
+        r = _admin_call(srv, method, path)
+        assert r.status_code == 403 and r.json() == {"error": "admin_auth"}, (method, path, r.status_code)
+    # the old constant header must not work either
+    assert _admin_call(srv, "POST", "/admin/pair", token="1").status_code == 403
+    assert _admin_call(srv, "GET", "/admin/status", token="1").status_code == 403
+
+
+def test_admin_api_accepts_the_right_secret_and_rejects_near_misses(live_factory):
+    from helpers import ADMIN_TOKEN
+    srv = live_factory(None)
+    assert _admin_call(srv, "GET", "/admin/status", token=ADMIN_TOKEN).status_code == 200
+    for bad in (ADMIN_TOKEN[:-1], ADMIN_TOKEN + "x", ADMIN_TOKEN.upper(), ""):
+        assert _admin_call(srv, "GET", "/admin/status", token=bad).status_code == 403, repr(bad)
+
+
+def test_the_dashboard_shell_carries_no_secret_and_no_data(live_factory):
+    from helpers import ADMIN_TOKEN
+    srv = live_factory(None)
+    r = _admin_call(srv, "GET", "/")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    assert ADMIN_TOKEN not in r.text and "spki" not in r.text.lower().replace("spki_pin", "")
+
+
+def test_a_generated_secret_is_stored_owner_only_and_is_stable(tmp_path):
+    import os
+    from openseek.auth import admin_token
+    t1 = admin_token(tmp_path)
+    assert len(t1) == 64 and admin_token(tmp_path) == t1
+    if os.name == "posix":
+        assert (tmp_path / "admin.token").stat().st_mode & 0o077 == 0
+    with pytest.raises(ValueError):
+        admin_token(tmp_path, "short")
+    assert admin_token(tmp_path, "x" * 16) == "x" * 16
+
+
+# ---- start-up warnings for deployments the server cannot protect itself
+ICACLS_SHARED = r"""D:\openseek-data NT AUTHORITY\SYSTEM:(OI)(CI)(F)
+                  BUILTIN\Administrators:(OI)(CI)(F)
+                  BUILTIN\Users:(OI)(CI)(IO)(GR,GE)
+                  NT AUTHORITY\Authenticated Users:(OI)(CI)(IO)(M)
+"""
+ICACLS_PRIVATE = r"""C:\Users\someone\AppData\Local\OpenSeek\data NT AUTHORITY\SYSTEM:(OI)(CI)(F)
+                  BUILTIN\Administrators:(OI)(CI)(F)
+                  DESKTOP\someone:(OI)(CI)(F)
+"""
+
+
+def test_a_data_directory_open_to_other_local_users_is_flagged():
+    from openseek.hardening import broad_acl_principals
+    assert broad_acl_principals(ICACLS_SHARED) == [r"BUILTIN\Users", r"NT AUTHORITY\Authenticated Users"]
+
+
+def test_a_private_data_directory_is_not_flagged():
+    from openseek.hardening import broad_acl_principals
+    assert broad_acl_principals(ICACLS_PRIVATE) == []
+    assert broad_acl_principals("Everyone:(OI)(CI)(DENY)(R)") == []                     # a deny entry is not exposure
+    assert broad_acl_principals(r"BUILTIN\Users:(OI)(CI)(RX)") == [r"BUILTIN\Users"]
+
+
+def test_container_detection(monkeypatch):
+    from openseek import hardening
+    monkeypatch.setattr(hardening.os.path, "exists", lambda p: p == "/.dockerenv")
+    assert hardening.running_in_container() is True
+    monkeypatch.setattr(hardening.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(hardening.Path, "read_text", lambda self, **kw: "0::/\n")
+    assert hardening.running_in_container() is False

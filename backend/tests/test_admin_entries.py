@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import time
 
-ADMIN = {"X-OpenSeek-Admin": "1"}
+ADMIN = {"X-OpenSeek-Admin": "test-admin-token"}
 FP = "ab" + "c" * 62
 
 

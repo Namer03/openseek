@@ -9,16 +9,35 @@ database, the TLS identity (`tls/`), the capability key (`secret.key`) and the t
 ```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\pip install -r requirements.txt -c requirements-lock.txt
 $env:OPENSEEK_DATA_DIR = "$env:LOCALAPPDATA\OpenSeek\data"
 .venv\Scripts\python -m openseek serve
 ```
 
 The server prints its LAN address(es), the certificate pin and the admin URL. Pair a device from a second terminal
-(same environment variable): `.venv\Scripts\python -m openseek pair`.
+(same environment variable): `.venv\Scripts\python -m openseek pair`. Open the local dashboard with `.venv\Scripts\python -m openseek dashboard`.
 
-Allow inbound TCP 8787 for the Python program on the Private network profile only, and limit it to the local subnet.
-The router must not forward 8787.
+**Keep the source checkout and the data directory inside your own user profile** (for example `%LOCALAPPDATA%\OpenSeek\data`, the default
+used above). A folder at the root of another drive such as `D:\` usually inherits permissions that let every local user read it, and
+the data directory holds the TLS private key, the capability key (`secret.key`), the admin secret (`admin.token`) and the invitation database.
+If the server finds such a data directory it logs a warning at start-up.
+
+Windows Firewall: when Windows asks, untick **Public networks**. Better, create the rule yourself so that it covers only this Python,
+only the Private profile and only your own subnet (run PowerShell as administrator; adjust the path):
+
+```powershell
+New-NetFirewallRule -DisplayName "OpenSeek API (LAN only)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8787 `
+  -Program "C:\path\to\openseek\backend\.venv\Scripts\python.exe" -Profile Private -RemoteAddress LocalSubnet
+```
+
+The router must not forward 8787 or 8788.
+
+### Admin secret
+
+The loopback admin API (port 8788) requires a per-install secret in the `X-OpenSeek-Admin` header. By default the server creates a random one in
+`<data>\admin.token` (readable only by you where the OS supports it); `python -m openseek pair|devices|revoke|dashboard` and the desktop app read it from
+there. To choose your own, set `OPENSEEK_ADMIN_TOKEN` (at least 16 characters; prefer the file for anything other than automation). The secret protects
+against other local users, other local programs and containers that can reach the host's loopback; it is not a substitute for keeping the data directory private.
 
 ### Optional: `backend/tools/run_production.ps1`
 
@@ -27,11 +46,12 @@ full pre-generation, 2 workers per source, request pacing 3/s, multi-range prefe
 the values to your link.
 
 ```powershell
-backend\tools\run_production.ps1 -Data D:\openseek-data              # start or restart on 8787
-backend\tools\run_production.ps1 -Data D:\openseek-data -MultiRange 0 -Guard 0
-backend\tools\run_production.ps1 -Data D:\openseek-data -PublicHost name.example.org:443   # also start the guest listener
+backend\tools\run_production.ps1                                  # start or restart on 8787 (data in %LOCALAPPDATA%\OpenSeek\data)
+backend\tools\run_production.ps1 -MultiRange 0 -Guard 0
+backend\tools\run_production.ps1 -PublicHost name.example.org:443   # also start the guest listener
 ```
 
+The desktop app and `duckdns.ps1` run these scripts from the checkout, so keep the checkout somewhere only you can write to.
 It only stops a process that listens on the API port and whose command line is `openseek serve`. Logs go to `<data>\logs\`.
 It expects the virtual environment at `backend\.venv`. `-CodeTag` checks out a git tag in the repository; do not use it unless you
 know you want that.
@@ -42,7 +62,7 @@ know you want that.
 sudo useradd --system --home-dir /var/lib/openseek --create-home --shell /usr/sbin/nologin openseek
 sudo git clone https://github.com/obadevyh/openseek.git /opt/openseek
 cd /opt/openseek/backend
-sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
+sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt -c requirements-lock.txt
 ```
 
 `/etc/systemd/system/openseek.service`:
@@ -65,6 +85,14 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/openseek
 ProtectHome=true
+UMask=0077
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target
@@ -75,7 +103,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now openseek
 sudo -u openseek env OPENSEEK_DATA_DIR=/var/lib/openseek /opt/openseek/backend/.venv/bin/python -m openseek pair
 ```
 
-The hardening options in the unit are a sensible starting point and have not been verified against every distribution.
+The hardening options in the unit are a sensible starting point; they have not been run on every distribution, so check `systemctl status` and the journal after enabling them.
 Firewall: allow TCP 8787 from your LAN only.
 
 ## Docker
@@ -88,9 +116,12 @@ docker compose exec openseek python -m openseek devices
 
 * Base image `python:3.12-slim`; the process runs as UID 10001; state lives in the `/data` volume (named volume `openseek-data` in the compose file).
 * The compose file publishes the owner API on the host's loopback only (`127.0.0.1:8787`). To serve devices on your LAN, change the
-  published address to your host's LAN address. Do not publish it on all interfaces or forward it from your router. Note that with Docker's
-  bridge networking the container sees clients through the bridge, so the "private clients only" check cannot protect a port you publish
-  publicly; the published address is your access control.
+  published address to your host's LAN address. **Never publish it as `8787:8787` or on `0.0.0.0`, and never forward it from your router.**
+  Behind Docker Desktop (Windows, macOS) and behind any reverse proxy or sidecar container, every client reaches the app from a private bridge or proxy
+  address, so the built-in "private clients only" check cannot tell a LAN device from the internet (this was reproduced in the pre-release review).
+  The published address is then your only access control. The server logs a warning when it detects it is running in a container. Pairing still needs
+  the one-time code, but the owner API would be reachable by anyone who can reach the port.
+* A TV on your LAN cannot reach `127.0.0.1:8787` on the Docker host; use the host's LAN address in the published port (for example `192.0.2.10:8787:8787`).
 * The admin listener binds to the container's own loopback and is deliberately not published. Use `docker compose exec` for pairing
   and device management. The Windows desktop app needs host-loopback access to the admin port and therefore is not meant for a containerised server.
 * Host networking is not used and not needed. The container needs outbound HTTPS to your media hosts.
@@ -110,11 +141,12 @@ The guest listener serves invited guest devices only; the owner API never needs 
 Guests are read-only by default; Contributor Mode additionally needs the owner to switch contributions on and grant the device the permission
 (see `docs/SECURITY-MODEL.md`). Kill switches: sharing off (`PUT /admin/sharing {"enabled": false}`) stops every guest call at once;
 `DELETE /admin/devices/<id>` revokes one device; removing the router rule closes the entrance. Per-address limits are applied on the public listener
-and blocks can be lifted with `DELETE /admin/public/blocks` (loopback, header `X-OpenSeek-Admin: 1`).
+and blocks can be lifted with `DELETE /admin/public/blocks` (loopback, with the admin secret in `X-OpenSeek-Admin`).
 
-Admin calls go to `http://127.0.0.1:8788` and need the header `X-OpenSeek-Admin: 1` on state-changing requests.
-The certificate is self-signed: guests authenticate the server by its pin, delivered in the invitation. `backend/tools/upnp_forward.py` is a
-site-specific UPnP experiment with a hard-coded router address; do not use it as is.
+Admin calls go to `http://127.0.0.1:8788` and need the admin secret (see "Admin secret" above) in the `X-OpenSeek-Admin` header on every request.
+The certificate is self-signed: guests authenticate the server by its pin, delivered in the invitation. `backend/tools/upnp_forward.py` is an
+optional manual UPnP helper: it needs `OPENSEEK_UPNP_BASE` (your router's UPnP URL) and creates permanent port mappings, so use it only if you understand
+what it opens; the router rule described above is the supported way.
 
 ## Updating
 

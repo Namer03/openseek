@@ -97,6 +97,16 @@ class CapSigner:
         return hmac.compare_digest(self.cap(device_id, preview_id, exp), cap)
 
 
+def admin_token(data_dir: Path, configured: str = "") -> str:
+    """The per-install secret the loopback admin API requires: OPENSEEK_ADMIN_TOKEN, else a random value kept in
+    <data>/admin.token (created owner-only). Without it, any local process could pair itself as the owner."""
+    if configured:
+        if len(configured) < 16:
+            raise ValueError("OPENSEEK_ADMIN_TOKEN must be at least 16 characters")
+        return configured
+    return load_or_create_secret(Path(data_dir) / "admin.token").hex()
+
+
 def load_or_create_secret(path: Path) -> bytes:
     path = Path(path)
     if path.exists():

@@ -144,6 +144,9 @@ def decode_barcode(jpeg: bytes, box=(0, 0, 320, 180)) -> int | None:
 
 
 # ----------------------------------------------------------------------------- policy
+ADMIN_TOKEN = "test-admin-token"          # the admin API needs a per-install secret; tests pin it
+
+
 def make_policy(origins, names: dict[str, list[str]] | None = None, **kw) -> DestinationPolicy:
     """Policy for tests: injected resolver + exact (127.0.0.1, port) allowance for fixture servers."""
     names = dict(names or {})
@@ -187,7 +190,7 @@ class LiveServer:
         if overrides.get("public_port") == -1:            # tests ask for an ephemeral public listener
             overrides["public_port"] = free_port()
         base = dict(data_dir=Path(data_dir), host="127.0.0.1", port=self.port, admin_port=self.admin_port,
-                    create_wait_s=3.0, frame_timeout_s=20.0)
+                    create_wait_s=3.0, frame_timeout_s=20.0, admin_token=ADMIN_TOKEN)
         base.update(overrides)
         self.settings = Settings().with_(**base)
         self.core = Core(self.settings, policy).start()
@@ -234,7 +237,7 @@ class LiveServer:
     def admin_client(self):
         import httpx
 
-        return httpx.Client(base_url=self.admin, headers={"X-OpenSeek-Admin": "1"}, timeout=30.0)
+        return httpx.Client(base_url=self.admin, headers={"X-OpenSeek-Admin": "test-admin-token"}, timeout=30.0)
 
     def pair(self, name: str = "Shield") -> tuple[str, str]:
         """Full OSP1 pairing: admin opens a window, client derives K over the PINNED key."""

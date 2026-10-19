@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+# python:3.12-slim pinned by digest (multi-arch index); bump deliberately to take OS security updates
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -10,8 +11,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY backend/requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+COPY backend/requirements.txt backend/requirements-lock.txt /app/
+RUN pip install -r /app/requirements.txt -c /app/requirements-lock.txt
 
 COPY backend/openseek /app/openseek
 
