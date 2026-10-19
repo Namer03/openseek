@@ -1,22 +1,28 @@
-# OpenSeek: minimal compose file.
+# OpenSeek: compose file.
 #
-# The owner API (8787) is published on the host's loopback only. To let devices on your LAN
-# reach it, change the left side to your host's LAN address, e.g. "192.0.2.10:8787:8787".
-# Do not publish it on 0.0.0.0 or forward it from your router: it is the owner interface.
-# The admin listener (8788) is not published at all; use `docker compose exec`.
+#   docker compose up -d --build                 this computer only (127.0.0.1): the safe default
+#   tools/docker-lan.ps1   (Windows)             let devices on your home network (an Android TV) connect:
+#   tools/docker-lan.sh    (Linux, macOS)        publishes the owner API on your private LAN address ONLY, then verifies the binding
+#
+# The owner API is published on ${OPENSEEK_LAN_IP}, which is 127.0.0.1 unless the helper (or your .env) sets a private LAN address.
+# The same variable is passed into the container as OPENSEEK_PUBLISHED_ON, and the server REFUSES TO START if it is empty, 0.0.0.0, or not a
+# loopback/private address. Never publish it on all interfaces or forward it from your router. The admin listener (8788) is not published at
+# all; use `docker compose exec`. Devices are authenticated by their pairing token; the address check cannot see real client addresses behind
+# Docker's NAT and is not relied on here.
 services:
   openseek:
     build: .
-    image: openseek:local
+    image: openseek-selfhosted:local        # own tag: never overwrites another deployment's openseek:local
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8787:8787"
+      - "${OPENSEEK_LAN_IP:-127.0.0.1}:${OPENSEEK_HOST_PORT:-8787}:8787"
       # Optional guest listener, only if you set OPENSEEK_PUBLIC_PORT below. Leave commented unless you
       # understand docs/SECURITY-MODEL.md and docs/INSTALL.md.
       # - "8789:8789"
     environment:
       OPENSEEK_DATA_DIR: /data
       OPENSEEK_PLAYBACK_GUARD: "1"
+      OPENSEEK_PUBLISHED_ON: "${OPENSEEK_LAN_IP:-127.0.0.1}"
       # OPENSEEK_PUBLIC_PORT: "8789"
       # OPENSEEK_PUBLIC_HOST: "name.example.org:443"
     volumes:

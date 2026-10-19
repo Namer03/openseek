@@ -111,7 +111,9 @@ All settings are environment variables read at start-up. Invalid values stop the
 | `OPENSEEK_CREATE_WAIT_S` | `4` | How long `POST /v1/previews` waits for the preflight |
 | `OPENSEEK_ALLOWED_PORTS` | `80,443,8080,8443` | Allowed upstream ports |
 | `OPENSEEK_ALLOW_HTTP_SOURCES` | `1` | Allow plain `http://` sources (public addresses only) |
-| `OPENSEEK_ALLOW_PUBLIC_CLIENTS` | `0` | Accept non-private client IPs on the owner API |
+| `OPENSEEK_ALLOW_PUBLIC_CLIENTS` | `0` | Accept non-private client IPs on the owner API. Needs `OPENSEEK_ALLOW_PUBLIC_CLIENTS_ACK=owner-api-is-public` as well; prefer the guest listener |
+| `OPENSEEK_PUBLISHED_ON` | none | Containers only (set by the compose file): the host address the port is published on. The server refuses to start unless it is loopback or a private LAN address |
+| `OPENSEEK_ALLOW_SHARED_DATA_DIR` | `0` | Windows: start even if other local users can write to the data directory (not recommended) |
 | `OPENSEEK_UPSTREAM_RPS` | `0` (off) | Global upstream request pacing (0 to 100) |
 | `OPENSEEK_MULTIRANGE_PREFETCH` / `OPENSEEK_MULTIRANGE_BATCH` | `0` / `8` | Experimental multi-range prefetch; windows per request (2 to 16) |
 | `OPENSEEK_PLAYBACK_GUARD` | `0` | Pause background extraction on rebuffer, stale telemetry or CDN stall |

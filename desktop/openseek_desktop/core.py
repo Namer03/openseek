@@ -82,6 +82,7 @@ class Admin:
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
+        self.auth_failed = False        # the server answered but refused the admin secret (old desktop build, wrong data folder, other user)
 
     def _client(self) -> httpx.Client:
         return httpx.Client(base_url=f"http://127.0.0.1:{self.cfg.admin_port}", headers=admin_headers(self.cfg.data_dir), timeout=4.0)
@@ -96,6 +97,10 @@ class Admin:
                 body = r.json()
             except ValueError:
                 body = {}
+            if r.status_code == 403 and body.get("error") == "admin_auth":
+                self.auth_failed = True
+                return None                 # treated like "admin unreachable"; the window explains why
+            self.auth_failed = False
             return body if r.status_code < 400 else {"_error": body.get("error", str(r.status_code)), "_status": r.status_code}
         except httpx.HTTPError:
             return None

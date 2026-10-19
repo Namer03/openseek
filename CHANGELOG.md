@@ -11,6 +11,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 * The decoder is opened with an empty FFmpeg protocol whitelist; the inbound TLS 1.2 floor is pinned by a test.
 * Start-up warnings for a Windows data directory readable by other local users and for running in a container.
 * Docker base image pinned by digest; `requirements-lock.txt` pins the full runtime dependency closure.
+* Fail-closed deployment rules: a container refuses to start unless `OPENSEEK_PUBLISHED_ON` is loopback or a private LAN address; owner and admin requests carrying proxy headers are refused; `OPENSEEK_ALLOW_PUBLIC_CLIENTS` needs an explicit acknowledgement; Windows refuses a data directory other users can write to.
+* Supported Docker LAN setup: `tools/docker-lan.ps1` / `tools/docker-lan.sh` publish the owner API on a private LAN address only and verify the binding. The compose image is now `openseek-selfhosted:local`.
+* Upgrade note: the desktop app and any client that sent `X-OpenSeek-Admin: 1` must be updated to the matching version (see `docs/INSTALL.md` "Updating"). Pairings, devices, sharing and invitations carry over unchanged.
 * See `docs/security/PRE-RELEASE-REVIEW.md` for the review, the remaining open items and what could not be tested.
 
 ## [0.1.0] - Initial public release

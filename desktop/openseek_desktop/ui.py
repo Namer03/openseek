@@ -186,6 +186,7 @@ class Poller(QThread):
                 s["devices"] = self.admin.get("/admin/devices")
                 s["invites"] = self.admin.get("/admin/invites")
             s["t"] = time.time()
+            s["admin_auth_failed"] = self.admin.auth_failed
             self.snap.emit(s)
             try:
                 es = self.lib.entries()
@@ -1623,6 +1624,10 @@ class MainWindow(QMainWindow):
     # ---- data flow
     def on_snap(self, s: Snapshot):
         self.last_snap = s
+        if s.get("admin_auth_failed") and not getattr(self, "_auth_warned", False):
+            self._auth_warned = True
+            self.toast("The server refused the admin secret. Update OpenSeek Desktop to the version that matches your server, and make sure the "
+                       "data folder in Settings is the server's (it contains admin.token).", 15000)
         self.srv_pill.set("● Server online" if s["online"] else "● Server offline", GOOD if s["online"] else BAD)
         for p in (self.dash, self.act, self.share, self.sett):
             p.update_snapshot(s, self.entries)

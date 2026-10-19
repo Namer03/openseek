@@ -108,25 +108,41 @@ Firewall: allow TCP 8787 from your LAN only.
 
 ## Docker
 
+Docker Desktop (Windows, macOS) and Linux. The compose file publishes the owner API on one address only.
+
 ```sh
-docker compose up -d --build
+docker compose up -d --build            # this computer only (127.0.0.1:8787)
 docker compose exec openseek python -m openseek pair
-docker compose exec openseek python -m openseek devices
 ```
 
-* Base image `python:3.12-slim`; the process runs as UID 10001; state lives in the `/data` volume (named volume `openseek-data` in the compose file).
-* The compose file publishes the owner API on the host's loopback only (`127.0.0.1:8787`). To serve devices on your LAN, change the
-  published address to your host's LAN address. **Never publish it as `8787:8787` or on `0.0.0.0`, and never forward it from your router.**
-  Behind Docker Desktop (Windows, macOS) and behind any reverse proxy or sidecar container, every client reaches the app from a private bridge or proxy
-  address, so the built-in "private clients only" check cannot tell a LAN device from the internet (this was reproduced in the pre-release review).
-  The published address is then your only access control. The server logs a warning when it detects it is running in a container. Pairing still needs
-  the one-time code, but the owner API would be reachable by anyone who can reach the port.
-* A TV on your LAN cannot reach `127.0.0.1:8787` on the Docker host; use the host's LAN address in the published port (for example `192.0.2.10:8787:8787`).
-* The admin listener binds to the container's own loopback and is deliberately not published. Use `docker compose exec` for pairing
-  and device management. The Windows desktop app needs host-loopback access to the admin port and therefore is not meant for a containerised server.
-* Host networking is not used and not needed. The container needs outbound HTTPS to your media hosts.
-* The image builds and starts (health endpoint, `pair` command and non-root user were checked once on Docker 29 on Windows). It has not been
-  tested on other platforms or architectures, and has not been run for long periods.
+**Connecting a TV on your home network.** Run the helper once; it detects your private LAN address, publishes the owner API on that address
+only (never on all interfaces), starts the container, and then checks with `docker inspect` that Docker really bound it there (it stops the
+container if not). It refuses public, CGNAT, link-local and loopback addresses.
+
+```powershell
+tools\docker-lan.ps1                 # Windows
+tools/docker-lan.sh                   # Linux, macOS
+tools\docker-lan.ps1 -Ip 192.168.1.20 -Port 18787   # choose the address or host port yourself
+tools\docker-lan.ps1 -Off            # back to this computer only
+```
+
+Then pair the TV with `docker compose exec openseek python -m openseek pair`, and enter the printed address and code on the TV.
+Do not forward this port from your router; for remote guests use the guest listener below.
+
+How this stays safe:
+* **The server refuses to start in a container unless it is told where it is published.** Compose passes the same variable to the port mapping
+  and to the container (`OPENSEEK_PUBLISHED_ON`), and the server refuses an empty value, `0.0.0.0`, a public address, or anything that is not
+  loopback or a private LAN address. A plain `docker run -p 8787:8787 ...` therefore does not start. (`host-network` is accepted for Linux host
+  networking.) The check validates what you declared; the helper verifies what Docker actually did.
+* **The source address is not what protects the API.** Behind Docker's NAT every client looks like the bridge, so the owner API relies on device
+  tokens: everything except `/v1/health` and the pairing endpoints needs a paired device, pairing needs the one-time code from a window you open,
+  and the admin API is never published (it binds the container's own loopback and needs the admin secret).
+* **Proxied requests are refused.** An owner or admin request carrying `X-Forwarded-For`, `Forwarded`, `X-Real-IP` and similar headers was relayed by
+  a proxy or tunnel and is answered `403 proxy_refused`, even with a valid token. Do not put the owner API behind a reverse proxy; use the guest listener for remote access.
+* The image runs as UID 10001 with a read-only root filesystem and no capabilities; state lives in the `/data` volume (`openseek-data`).
+  The admin listener is reached with `docker compose exec`. The Windows desktop app needs host-loopback access to the admin port and is not meant for a containerised server.
+* The compose image is tagged `openseek-selfhosted:local` so it never overwrites another deployment's `openseek:local`.
+* Tested on Docker 29 on Windows (Docker Desktop) with simulated LAN clients; not tested on Linux Docker, other architectures, or for long runs.
 
 ## Optional: guest listener
 
@@ -149,6 +165,13 @@ optional manual UPnP helper: it needs `OPENSEEK_UPNP_BASE` (your router's UPnP U
 what it opens; the router rule described above is the supported way.
 
 ## Updating
+
+**Upgrading from a release without the admin secret** (any build before `0.1.0` plus the security fixes): nothing to migrate in the data directory. The new server creates
+`<data>/admin.token` on first start, keeps the TLS identity (so existing pairings stay valid), the paired devices, sharing settings and invitations (verified by an upgrade test).
+What changes: the **desktop app and any script that sends `X-OpenSeek-Admin: 1` must be updated** at the same time. An old desktop build gets `403 admin_auth` and cannot manage the server until you
+install the matching version (the new one reads `admin.token` from the server's data folder); the CLI (`pair`, `devices`, `revoke`, `dashboard`) already does. Docker users: re-run `tools/docker-lan.*` once if you used a hand-edited compose file,
+because the container now has to declare its publish address. Anything that reached the owner API through a reverse proxy must switch to direct access.
+
 
 Stop the server, update the code, `pip install -r backend/requirements.txt`, start it again with the same data directory. Database changes are additive,
 but back up the data directory first.

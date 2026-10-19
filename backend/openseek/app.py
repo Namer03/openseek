@@ -50,6 +50,10 @@ log = logging.getLogger("openseek.app")
 MAX_BODY = 16 * 1024
 MAX_MS = 12 * 3600 * 1000
 PUBLIC_PATHS = {"/v1/health", "/v1/pair/start", "/v1/pair/claim"}
+# Headers a reverse proxy, tunnel or load balancer adds. The owner and admin APIs are direct-connection only: a request that carries any of them
+# was relayed by something else, so its TCP peer address says nothing about who sent it. Refused (remote access is what the guest listener is for).
+PROXY_HEADERS = ("x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-forwarded-port", "forwarded", "x-real-ip",
+                 "cf-connecting-ip", "true-client-ip", "x-client-ip", "via")
 _HOST_RE = re.compile(r"^(?:[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\])(?::\d{1,5})?$")
 SECURITY_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
@@ -224,6 +228,8 @@ class Guard:
             return await _send_json(send, 403, {"error": "forbidden"})
 
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+        if not self.public and any(h in headers for h in PROXY_HEADERS):
+            return await _send_json(send, 403, {"error": "proxy_refused"})
         clen = headers.get("content-length")
         if clen is not None and (not clen.isdigit() or int(clen) > MAX_BODY):
             return await _send_json(send, 413, {"error": "too_large"})
@@ -1201,6 +1207,12 @@ def serve(settings: Settings) -> None:
     import uvicorn
 
     setup_logging(settings.log_level)
+    from .hardening import published_on_error, refuse_shared_data_dir, running_in_container
+    refuse_shared_data_dir(settings.data_dir)
+    if running_in_container():
+        why = published_on_error(os.environ.get("OPENSEEK_PUBLISHED_ON"))
+        if why:
+            raise SystemExit("refusing to start in a container: " + why)
     core = Core(settings).start()
     api_cfg, admin_cfg = uvicorn_configs(core, create_api_app(core), create_admin_app(core))
     servers = [uvicorn.Server(api_cfg), uvicorn.Server(admin_cfg)]
@@ -1209,10 +1221,10 @@ def serve(settings: Settings) -> None:
         servers.append(uvicorn.Server(pub_cfg))
         log.info("PUBLIC guest listener: %s:%d (advertised as %s)", settings.public_bind, settings.public_port,
                  settings.public_host or "(no public host set)", extra=plain())
-    from .hardening import CONTAINER_WARNING, check_data_dir, running_in_container
+    from .hardening import CONTAINER_NOTE, check_data_dir
     check_data_dir(core.data_dir, log.warning)
     if running_in_container():
-        log.warning(CONTAINER_WARNING)
+        log.info(CONTAINER_NOTE, os.environ.get("OPENSEEK_PUBLISHED_ON", "?"))
     log_banner(core)
 
     async def main():

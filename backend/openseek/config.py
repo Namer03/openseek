@@ -177,6 +177,9 @@ class Settings:
             except (ValueError, ConfigError) as e:
                 raise ConfigError(f"OPENSEEK_{suffix}: {e}") from None
         s = replace(s, **kw)
+        if s.allow_public_clients and env.get("OPENSEEK_ALLOW_PUBLIC_CLIENTS_ACK") != "owner-api-is-public":
+            raise ConfigError("OPENSEEK_ALLOW_PUBLIC_CLIENTS=1 turns off the owner API's client-address check. Remote access is what the guest "
+                              "listener is for; if you really mean it, also set OPENSEEK_ALLOW_PUBLIC_CLIENTS_ACK=owner-api-is-public")
         s.validate()
         return s
 

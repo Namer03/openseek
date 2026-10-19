@@ -112,9 +112,10 @@ def test_inbound_tls_context_refuses_anything_below_tls_1_2():
 
 
 # ---- the loopback admin API needs a per-install secret (review finding: any local process could pair itself as owner)
-def _admin_call(srv, method, path, token=None, **kw):
+def _admin_call(srv, method, path, token=None, headers=None, **kw):
     import httpx
     h = {"X-OpenSeek-Admin": token} if token is not None else {}
+    h.update(headers or {})
     return httpx.request(method, f"{srv.admin}{path}", headers=h, timeout=10, **kw)
 
 
@@ -188,3 +189,87 @@ def test_container_detection(monkeypatch):
     monkeypatch.setattr(hardening.os.path, "exists", lambda p: False)
     monkeypatch.setattr(hardening.Path, "read_text", lambda self, **kw: "0::/\n")
     assert hardening.running_in_container() is False
+
+
+# ---- fail-closed behaviour for deployments where the peer address cannot be trusted
+PROXY_HDRS = [{"X-Forwarded-For": "203.0.113.9"}, {"Forwarded": "for=203.0.113.9"}, {"X-Real-IP": "203.0.113.9"},
+              {"CF-Connecting-IP": "203.0.113.9"}, {"X-Forwarded-Host": "example.org"}, {"Via": "1.1 caddy"}]
+
+
+def test_a_proxied_request_is_refused_on_the_owner_api(live_factory):
+    """A reverse proxy or tunnel makes every client look like the proxy's (private) address. Anything that carries proxy headers is
+    refused on the owner API, even with a valid token; the same request without the header works."""
+    import httpx
+    srv = live_factory(None)
+    tok, _ = _pair_owner(srv)
+    base = f"https://127.0.0.1:{srv.port}"
+    with httpx.Client(verify=False, timeout=10) as c:
+        assert c.get(f"{base}/v1/health").status_code == 200
+        assert c.get(f"{base}/v1/pair/status", headers={"Authorization": "Bearer " + tok}).status_code == 200
+        for h in PROXY_HDRS:
+            for path, auth in (("/v1/health", {}), ("/v1/pair/status", {"Authorization": "Bearer " + tok})):
+                r = c.get(base + path, headers={**h, **auth})
+                assert r.status_code == 403 and r.json() == {"error": "proxy_refused"}, (h, path, r.status_code)
+
+
+def test_a_proxied_request_is_refused_on_the_admin_api(live_factory):
+    from helpers import ADMIN_TOKEN
+    srv = live_factory(None)
+    for h in PROXY_HDRS:
+        r = _admin_call(srv, "GET", "/admin/status", token=ADMIN_TOKEN, headers=h)
+        assert r.status_code == 403 and r.json() == {"error": "proxy_refused"}, h
+    assert _admin_call(srv, "GET", "/admin/status", token=ADMIN_TOKEN).status_code == 200
+
+
+def test_allow_public_clients_needs_an_explicit_acknowledgement():
+    from openseek.config import ConfigError, Settings
+    with pytest.raises(ConfigError):
+        Settings.from_env({"OPENSEEK_ALLOW_PUBLIC_CLIENTS": "1"})
+    s = Settings.from_env({"OPENSEEK_ALLOW_PUBLIC_CLIENTS": "1", "OPENSEEK_ALLOW_PUBLIC_CLIENTS_ACK": "owner-api-is-public"})
+    assert s.allow_public_clients is True
+    assert Settings.from_env({}).allow_public_clients is False
+
+
+def test_a_data_directory_writable_by_other_users_is_refused(monkeypatch, tmp_path):
+    from openseek import hardening
+    monkeypatch.delenv("OPENSEEK_ALLOW_SHARED_DATA_DIR", raising=False)
+    monkeypatch.setattr(hardening, "data_dir_writable_by_others", lambda p: [r"BUILTIN\Users"])
+    with pytest.raises(SystemExit) as e:
+        hardening.refuse_shared_data_dir(tmp_path / "does-not-exist-yet")
+    assert "refusing to start" in str(e.value)
+    monkeypatch.setenv("OPENSEEK_ALLOW_SHARED_DATA_DIR", "1")                       # explicit, informed opt-out
+    hardening.refuse_shared_data_dir(tmp_path)
+    monkeypatch.delenv("OPENSEEK_ALLOW_SHARED_DATA_DIR")
+    monkeypatch.setattr(hardening, "data_dir_writable_by_others", lambda p: [])
+    hardening.refuse_shared_data_dir(tmp_path)                                      # a private folder starts normally
+
+
+def test_read_only_exposure_warns_but_write_exposure_refuses():
+    from openseek.hardening import broad_acl_principals
+    ro = r"D:\x BUILTIN\Users:(OI)(CI)(RX)"
+    rw = r"D:\x NT AUTHORITY\Authenticated Users:(OI)(CI)(M)"
+    assert broad_acl_principals(ro) == [r"BUILTIN\Users"] and broad_acl_principals(ro, writes_only=True) == []
+    assert broad_acl_principals(rw, writes_only=True) == [r"NT AUTHORITY\Authenticated Users"]
+
+
+def _pair_owner(srv):
+    """Full OSP1 pairing against a live test server; returns (token, device_id)."""
+    return _register_owner(srv)
+
+
+def _register_owner(srv):
+    from test_scenarios import _register
+    return _register(srv, "owner-tv")
+
+
+@pytest.mark.parametrize("value", ["127.0.0.1", "192.168.1.20", "10.0.0.5", "172.16.4.9", "::1", "fd00::5", "192.168.1.20,127.0.0.1", "host-network"])
+def test_a_container_may_be_published_on_loopback_or_a_private_lan_address(value):
+    from openseek.hardening import published_on_error
+    assert published_on_error(value) is None
+
+
+@pytest.mark.parametrize("value", [None, "", "  ", "0.0.0.0", "::", "8.8.8.8", "203.0.113.7", "169.254.1.1", "100.64.0.5", "224.0.0.1",
+                                   "localhost", "192.168.1.20,0.0.0.0", "192.168.1.20,8.8.8.8", "not-an-ip"])
+def test_a_container_refuses_to_start_when_the_publish_address_is_missing_or_dangerous(value):
+    from openseek.hardening import published_on_error
+    assert published_on_error(value)                                     # a non-empty reason means: refuse
