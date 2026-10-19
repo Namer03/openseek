@@ -1,0 +1,8 @@
+# OpenSeek Gate 1 benchmark dependencies (pinned; verified on Python 3.14.4 / Windows 11)
+psutil==7.1.0
+Pillow==12.2.0
+av==18.1.0
+pytest==9.1.1
+# External (not pip): ffmpeg/ffprobe >= 7 on PATH (bench verified with 9.0.1 gyan.dev full build,
+# which includes zscale (libzimg), tonemap and libplacebo).
+numpy==2.5.3

@@ -1,0 +1,7 @@
+# OpenSeek backend runtime dependencies (exact pins; verified on CPython 3.14.4 Windows and 3.12 Linux)
+fastapi==0.143.3
+uvicorn==0.54.0
+cryptography==50.0.2
+av==18.1.0
+Pillow==12.2.0
+numpy==2.5.3

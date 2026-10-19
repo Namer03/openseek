@@ -1,0 +1,34 @@
+# OpenSeek: minimal compose file.
+#
+# The owner API (8787) is published on the host's loopback only. To let devices on your LAN
+# reach it, change the left side to your host's LAN address, e.g. "192.0.2.10:8787:8787".
+# Do not publish it on 0.0.0.0 or forward it from your router: it is the owner interface.
+# The admin listener (8788) is not published at all; use `docker compose exec`.
+services:
+  openseek:
+    build: .
+    image: openseek:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+      # Optional guest listener, only if you set OPENSEEK_PUBLIC_PORT below. Leave commented unless you
+      # understand docs/SECURITY-MODEL.md and docs/INSTALL.md.
+      # - "8789:8789"
+    environment:
+      OPENSEEK_DATA_DIR: /data
+      OPENSEEK_PLAYBACK_GUARD: "1"
+      # OPENSEEK_PUBLIC_PORT: "8789"
+      # OPENSEEK_PUBLIC_HOST: "name.example.org:443"
+    volumes:
+      - openseek-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2g
+
+volumes:
+  openseek-data:

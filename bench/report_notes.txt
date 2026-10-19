@@ -1,0 +1,137 @@
+## Verdict: Gate 1 PASSES (on synthetic REMUX-like data + real public internet files; TorBox UNTESTED)
+
+On a 17.6 GB, 82-min, 28.7 Mbit/s MKV (Cues at the end, the way mkvmerge writes them) served through a
+simulated remote CDN (100 Mbit/s shared link, 40 ms RTT, +2 RTT per new TCP/TLS connection):
+
+* **Scrub to 80:00, cold** (new job, nothing probed or opened): the first usable thumbnail is on disk in
+  **0.56 s** with S5 (PyAV in-process, persistent container), or **1.12 s** with per-process ffmpeg (S2,
+  including preflight + ffprobe). The 10 neighbouring thumbnails are all done by **2.3 s** (S5), **3.7 s**
+  (S2 x 4 processes) or 8.2 s (S2 x 1).
+* Full-movie generation from 0 (S4, the naive approach) must download the file sequentially up to 80:00:
+  RESULT_SCRUB_SEQ. The S4 run on the 0.86 GB fixture read **100 %** of the file.
+
+All numbers come from the server's own byte/request accounting and from exact process CPU/RSS
+(GetProcessTimes / PeakWorkingSetSize). Nothing is estimated.
+
+### The three latencies (definitions used everywhere below)
+
+| latency | definition | S5 keyframe (PyAV + RangeReader) | S2 per-process ffmpeg (`S2-tuned-slice`) |
+|---|---|---|---|
+| **cold** | new job, nothing probed or opened. Includes preflight/probe, EBML header, the Cues read at the file tail, then the frame | **0.56 s**, 1.79 MB, 5 requests (process start -> JPEG on disk) | **1.12 s**, 2.81 MB, 6 requests (0.39 s preflight+probe + 0.73 s frame) |
+| **warm-source** | the same source is already probed and open, at a new timestamp | **0.17 s**/frame (p95 0.17), 0.79 MB, 2 requests | 0.71 s/frame (p95 0.72), 1.95 MB, 4 requests. Each process re-reads the header and Cues. |
+| **warm-cache** | the thumbnail was already generated and is served from disk over HTTP (same cdn profile) | 42 ms on a reused connection (= 1 RTT), 122 ms on a new connection, ~6-10 kB per JPEG | same |
+
+S5 with accurate seek (exact frame, error <= 1 frame): cold 0.73 s, warm 0.49 s, 3.1 MB per frame,
+because it decodes from the keyframe up to T.
+
+### Headline (best strategy = S5 keyframe, `remux_like.mkv`, `cdn` profile, 20 frames spread over 82 min)
+
+| cold first frame | warm per frame | bytes/frame | requests/frame | CPU-s/frame | peak RSS |
+|---|---|---|---|---|---|
+| 0.57 s | 0.17 s | 0.84 MB (0.005 % of the 17.6 GB file) | 2.15 | 0.016-0.05 | 66-81 MB |
+
+On real files over the internet: a 4K HEVC HDR10 MP4 (Jellyfin, 221 MB) gives S5 cold 1.25-1.44 s, warm
+0.19 s, 0.65 MB/frame. Sintel 1080p MKV (Blender, 1.18 GB) gives S5 cold 0.63-0.81 s, warm 0.27 s,
+1.9 MB/frame. S2 on the same two files: 2.2 s and 0.73 s per frame.
+
+### How ffmpeg actually seeks a remote MKV (measured request logs, section 1)
+
+* **Cues at the end (normal REMUX):** 4 requests per cold ffmpeg process: `0-` (header + probe) ->
+  **the tail of the file, where the Cues are read lazily on the first seek** (56 kB for 82 min) -> back to
+  where it was (~250 kB, wasted) -> the target cluster. A seek is then one ranged read: about one keyframe
+  plus read-ahead, not a whole GOP. **Cues at the front:** 2 requests and 0.44 s instead of 0.67 s.
+* **No Cues:** a linear scan. To seek to 200 s of a 240 s file took 70-98 s and downloaded
+  **725-733 MB of 861 MB (84 %)**, with every strategy. A 40-80 GB REMUX without Cues is effectively
+  impossible to seek: detect it (the tail read finds no Cues) and refuse or degrade.
+* **MP4 with moov at the end:** the same pattern as Cues at the end (`0-` -> tail moov -> back -> target),
+  and just as cheap (0.71 s). Faststart MP4: 2 requests.
+* ffmpeg's default open-ended `Range: bytes=X-` lets the CDN push data until ffmpeg hangs up (3.3 MB per
+  frame for S2 noaccurate). `-request_size 1M -multiple_requests 1 -probesize 256k` cuts this to
+  **1.87 MB per frame**. `-thread_type slice` stops frame-threading from delaying the first decoded frame,
+  which otherwise means over-reading, in accurate mode: 5.4 vs 7.9 MB per frame.
+* PyAV's decoder must use **slice threading**. The default (frame threading) read 4 MB instead of 0.8 MB per
+  keyframe: on 16 cores that is about 16 packets of decode delay.
+
+### Keyframe-only vs accurate
+
+With a 2 s GOP, keyframe snapping has a measured error of -0.004 to -1.96 s (always backwards). That is
+**acceptable for 10 s-interval thumbnails** (less than 1/5 of the interval), and it costs 0.17 s and 0.8 MB
+against 0.49-0.70 s and 3-4.7 MB for accurate seeking. With a 10 s GOP (`gop10.mkv`) the error grows to
+-9.1 s: still inside the cue's own 10 s window, but at its edge. Accurate seeking there costs 19-23 MB and
+2.7-3 s per frame. Recommendation: keyframe mode by default, and label each cue with the keyframe's real pts.
+`-skip_frame nokey` *with* accurate seek is the worst option: it lands on the *next* keyframe (+0.9..+8.2 s)
+and reads the whole GOP (12.7 MB, or 40 MB with a 10 s GOP).
+
+### Concurrent playback impact (core result, section 8)
+
+The player and the thumbnailer share the 100 Mbit/s link. The player has just seeked (empty buffer) when a
+16-thumbnail job starts:
+
+| playback bitrate | job | startup (2.5 s buffered) | stalls | player throughput during job |
+|---|---|---|---|---|
+| 28.7 Mbit/s | none / S5x1 / S5x2 / S5x4 | 0.87 / 0.97 / 1.12 / 1.42 s | 0 | 83 / 66 / 54 / 39 Mbit/s (all >= 28.7) |
+| 28.7 Mbit/s | S2x1 / S2x2 / S2x4 | 0.98 / 1.12 / 1.48 s | 0 | 71 / 59 / 40 Mbit/s |
+| 60 Mbit/s (4K REMUX) | none / S5x1 / S5x2 / S5x4 | 1.80 / 2.18 / 2.66 / **3.03** s | 0 | 83 / 66 / 54 / **39 (< 60)** |
+| 60 Mbit/s | S2x1 / S2x2 / S2x4 | 2.11 / 2.50 / **3.50** s | 0 | 71 / 59 / **40 (< 60)** |
+
+At concurrency 4, a 60 Mbit/s player gets **less than its playback bitrate** (39-40 Mbit/s) and its startup
+after a seek rises from 1.8 s to 3.0-3.5 s. There were no rebuffering stalls in these runs, but only because
+the job is short (2.3-4.6 s). At concurrency 1-2, throughput stays at or above the bitrate. **Production
+rule:** at most 1-2 extraction streams per source, plus a global byte-rate budget. This matters only when the
+backend and the TV share a downlink (self-hosted at home). A VPS backend uses a different path to the CDN.
+
+### Conditions that fail or degrade (measured)
+
+| condition | result |
+|---|---|
+| server without Range (MKV, T=200 s) | S1: works but reads **721 MB (84 %)** and takes 69 s. S2 noaccurate: **silently returns the frame at ~2 s (error -198 s)**. Faststart MP4: 717 MB, 69 s. Preflight (Range GET must return 206) catches it in one request; RangeReader refuses without draining the body (16 kB). **Reject such sources.** |
+| no Cues | linear scan, 84 % of the file (see above) |
+| 302 signed redirect | ffmpeg re-follows the 302 **on every request** (20 redirects for 5 frames, +0.5 s per frame). RangeReader resolves it once (1 redirect for 5 frames). Server logs show `?sig=REDACTED&exp=REDACTED`. |
+| link expires (403) | classified `http_403_expired` within 0.15 s. ffmpeg at loglevel error hides the 403 on a seek (it reports "file ended prematurely"), so `extract.diagnose()` makes one ranged GET to classify the failure. |
+| connection dropped mid-body | ffmpeg `-reconnect 1` recovers (5 requests, 0.85 s). RangeReader retries the range and recovers. Without reconnect: fails (classified `unsupported`, a known misclassification). |
+| T beyond duration | ffmpeg *succeeds* and returns the last keyframe. Clamp T to the probed duration. |
+| server stall | `-rw_timeout` 1.5 s gives `timeout` (6 s with the reconnect retries). The hard wall-clock kill gives `timeout` at 2.0 s. Cancel gives `cancelled` at 0.5 s. **No orphan processes** in any case. |
+| S3 multi-input (one ffmpeg, N x `-ss -i`) | works, but **2.3 GB RSS for 20 inputs** and 9 MB per frame. No connection or index reuse (every input reopens). Rejected. |
+| PyAV with libav's built-in HTTP IO | seeks by reading forward linearly: 219 MB transferred for a 60 MB file, 12 s cold. Rejected; use our RangeReader. |
+| 4K HEVC HDR10 tonemap | zscale+hable *after* the downscale: 0.47 CPU-s per frame, 229 MB RSS. Full-resolution tonemap: 1.29 CPU-s, 614 MB. libplacebo (Vulkan): 1.58 CPU-s, 454 MB, slower. No tonemap: 0.22 CPU-s (washed out). S5 numpy Hable at thumbnail size (PyAV wheels lack zscale): 0.39 CPU-s per frame, 0.46 s warm. |
+
+### Recommended production design
+
+1. `preflight()`: one `Range: bytes=0-262143` GET. It must return 206 with Content-Range, otherwise reject.
+   It also resolves the signed redirect once and gets the size.
+2. **S5 is the extraction engine:** one PyAV container per (source, job) on top of `RangeReader`.
+   RangeReader uses bounded Range requests (256 kB blocks, doubling read-ahead up to 2 MB on sequential
+   reads), one keep-alive connection and an LRU block cache. The decoder uses `thread_type=SLICE`,
+   `probesize=256k` and `analyzeduration=0.5s`. Seek with backward=True and take the first decoded frame
+   (keyframe mode). Tonemap at thumbnail size when the transfer is PQ/HLG. Keep the container open while the
+   user scrubs (warm-source 0.17 s). Close it on an idle timeout or when the link expires; on 403, ask the
+   addon for a fresh link.
+3. Fallback / isolated worker: per-process ffmpeg with
+   `-rw_timeout 10000000 -reconnect 1 -reconnect_on_network_error 1 -reconnect_delay_max 2
+   -reconnect_max_retries 2 -multiple_requests 1 -request_size 1048576 -probesize 262144
+   -analyzeduration 500000 -thread_type slice -noaccurate_seek -ss T -i URL -map 0:v:0 -an -sn -dn
+   -frames:v 1 -fps_mode passthrough -vf "scale=320:180:force_original_aspect_ratio=decrease,pad=320:180:(ow-iw)/2:(oh-ih)/2,setsar=1"
+   -q:v 5 -f image2 -update 1 out.jpg`. **`-fps_mode passthrough` is required with `-noaccurate_seek`**:
+   without it, CFR frame dropping returns a different frame. Use argument arrays only, plus a hard kill
+   timer. The URL appears in argv, which other local users can see: prefer the in-process S5 or a
+   single-tenant container.
+4. Generate on demand, around the scrub position first, then fill outward at concurrency <= 2 under a
+   byte-rate budget. Cache JPEGs and sprites on disk (warm-cache 42 ms).
+5. Reject: sources without Range; MKV without Cues (detected after the tail read); T > duration (clamp).
+
+### Caveats / not covered
+
+* Fixtures are synthetic (noise content). P-frames are about the size of I-frames here, so the bytes read per
+  keyframe are ~150 kB plus read-ahead. Real REMUX I-frames are larger (0.3-1 MB): expect 1-2 MB per frame.
+  The real Sintel and Jellyfin results (0.65-2.4 MB per frame) are consistent with this.
+* The `cdn` profile is a model: a shared FIFO token bucket, per-request latency, no loss, no TCP slow start.
+  A 4K REMUX (60-80 Mbit/s HEVC 10-bit, 40-80 GB) is covered only by the 60 s `hdr4k.mkv` (decode and
+  tonemap cost) and by the Jellyfin file. Seek and byte behaviour depend on the container, which is the same.
+* **TorBox: UNTESTED / BLOCKED.** No URL was supplied. Run it with:
+  `OPENSEEK_BENCH_URL='<link>' python run_bench.py --exp torbox --url-env OPENSEEK_BENCH_URL`
+  (PowerShell: `$env:OPENSEEK_BENCH_URL='<link>'; python run_bench.py --exp torbox`). The URL is never
+  printed: hosts are shown with a hashed path.
+* Measured on Windows 11 / 16 cores. Linux numbers are UNTESTED (WSL has no ffmpeg).
+* Quick mode (`python run_bench.py --quick`, about 5 min) re-measures containers (without no-cues), the on-demand
+  80:00 cold/warm scenario, playback impact at 28.7 Mbit/s for S5 x1/x2/x4 and S2 x4, and the failure
+  modes (without the 69 s no-Range ffmpeg runs). It writes to results/quick/.

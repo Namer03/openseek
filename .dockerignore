@@ -1,0 +1,16 @@
+.git
+.gitignore
+.gitattributes
+**/__pycache__
+**/*.pyc
+**/.venv
+**/.pytest_cache
+data
+*.log
+.env
+desktop
+bench
+docs
+backend/tests
+backend/tools
+backend/openapi.json

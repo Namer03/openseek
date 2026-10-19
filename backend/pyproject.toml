@@ -1,0 +1,23 @@
+[project]
+name = "openseek"
+version = "0.1.0"
+description = "Self-hosted, privacy-first seek-preview thumbnails (OpenSeek API v1)"
+requires-python = ">=3.12"
+
+dependencies = [
+  "fastapi==0.143.3",
+  "uvicorn==0.54.0",
+  "cryptography==50.0.2",
+  "av==18.1.0",
+  "Pillow==12.2.0",
+  "numpy==2.5.3",
+]
+
+[project.scripts]
+openseek = "openseek.cli:main"
+
+[tool.setuptools]
+packages = ["openseek"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
