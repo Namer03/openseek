@@ -65,7 +65,7 @@ class Config:
     def load(cls) -> "Config":
         c = cls()
         try:
-            for k, v in json.loads(CONFIG_PATH.read_text(encoding="utf-8")).items():
+            for k, v in json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig")).items():      # utf-8-sig: Notepad/PowerShell may add a BOM
                 if hasattr(c, k):
                     setattr(c, k, v)
         except (OSError, ValueError):
