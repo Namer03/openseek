@@ -138,6 +138,14 @@ class GrabResult:
     via: str = "a"          # "b" when produced from an alternative thumbnail source
 
 
+def worker_argv() -> list[str]:
+    """The worker's argument vector. Frozen (PyInstaller): the same executable with a marker
+    argument (see run_server.py); otherwise an isolated interpreter running the bootstrap."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--openseek-worker"]
+    return [sys.executable, "-I", "-c", _BOOT, PACKAGE_PARENT]
+
+
 def _child_env() -> dict[str, str]:
     keep = ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL")
     return {k: os.environ[k] for k in keep if k in os.environ}
@@ -150,7 +158,7 @@ class WorkerProcess:
             flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | getattr(
                 subprocess, "CREATE_NO_WINDOW", 0)
         self.proc = subprocess.Popen(
-            [sys.executable, "-I", "-c", _BOOT, PACKAGE_PARENT],
+            worker_argv(),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             env=_child_env(), creationflags=flags, close_fds=True)
         self._lines: queue.Queue = queue.Queue()

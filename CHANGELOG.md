@@ -4,6 +4,14 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+### Added
+* **Windows installer** (`OpenSeekSetup-v0.2.0-Windows-x64.exe`): installs the server (frozen, no Python needed) as an automatic Windows service under a restricted virtual account, with a private data folder, a LAN-only firewall rule, Start Menu entries and an uninstaller. Source code in `installer/`.
+* Desktop: automatic connection to the installed server, Start/Stop/Restart via the service, **Connect a TV** (address, one-time pairing code, confirmation), simple and advanced modes, and an advanced server-settings editor.
+* Server: optional `OPENSEEK_CONFIG_FILE` (allowlisted keys only), frozen-executable worker dispatch.
+* Third-party source offer for the bundled FFmpeg libraries (GPL build), notices and licence texts; the corresponding source archives are attached to the release.
+
 ### Licence
 * OpenSeek is released under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later); `LICENSE` added and `pyproject.toml` updated. Source code and the Dockerfile are published; prebuilt Docker images are not, because the FFmpeg libraries inside the PyAV wheels are a GPL build.
 

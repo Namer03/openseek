@@ -6,6 +6,7 @@ Reads the installed distributions' metadata (the licence/notice files that ship 
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
@@ -13,6 +14,8 @@ from importlib import metadata
 from pathlib import Path
 
 BUNDLED = ["PySide6-Essentials", "shiboken6", "httpx", "httpcore", "h11", "anyio", "idna", "certifi", "psutil", "Pillow"]
+if os.environ.get("OPENSEEK_LICENSE_PACKAGES"):          # e.g. the server bundle: a comma-separated package list
+    BUNDLED = [p.strip() for p in os.environ["OPENSEEK_LICENSE_PACKAGES"].split(",") if p.strip()]
 LICENSE_FILE = re.compile(r"(^|/)(licen[cs]es?|copying|notice|authors)([^/]*)$", re.IGNORECASE)
 
 

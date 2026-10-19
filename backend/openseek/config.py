@@ -7,6 +7,9 @@ Python code (tests do that), which production entry points never do.
 """
 from __future__ import annotations
 
+import ipaddress
+import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field, replace
@@ -16,6 +19,65 @@ GiB = 1 << 30
 MiB = 1 << 20
 
 PREGEN_MODES = ("off", "overview", "full")
+
+log = logging.getLogger("openseek.config")
+
+# OPENSEEK_CONFIG_FILE (a JSON object keyed by Settings field names) may be writable by a less privileged
+# user than the one the server runs as, so only these harmless knobs are ever honoured from it. Everything
+# else (data_dir, capture_source_file, allow_*, tokens, outbound policy ...) can only come from the real
+# environment.
+CONFIG_FILE_KEYS = frozenset({
+    "port", "admin_port", "host", "cache_max_bytes", "retention_days", "bg_mbps", "upstream_rps",
+    "workers_per_source", "max_active_sources", "playback_guard", "multirange_prefetch", "public_port",
+    "public_bind", "public_host", "log_level", "contrib_mbps", "contrib_max_sources", "contrib_hosts"})
+_BIND_KEYS = ("host", "public_bind")
+_LAN_NETS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"))
+_CONFIG_FILE_MAX = 64 * 1024
+
+
+def _lan_bind_ok(v: object) -> bool:
+    """0.0.0.0, a loopback address or a private LAN address (IP literal only, never a name)."""
+    if not isinstance(v, str):
+        return False
+    try:
+        ip = ipaddress.ip_address(v.strip())
+    except ValueError:
+        return False
+    if ip == ipaddress.ip_address("0.0.0.0") or ip.is_loopback:
+        return True
+    return any(ip.version == n.version and ip in n for n in _LAN_NETS)
+
+
+def read_config_file(path: str, conv: dict) -> dict:
+    """Parse the config file into {field: converted value}. Never raises: problems are logged and skipped.
+    `conv` maps field name -> converter (the same ones the environment path uses)."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(_CONFIG_FILE_MAX + 1)
+        if len(raw) > _CONFIG_FILE_MAX:
+            raise ValueError("file too large")
+        doc = json.loads(raw.decode("utf-8-sig"))
+        if not isinstance(doc, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as e:      # UnicodeDecodeError and JSONDecodeError are ValueErrors
+        log.warning("OPENSEEK_CONFIG_FILE %s ignored: %s", path, type(e).__name__ if not isinstance(e, ValueError) else e)
+        return {}
+    out: dict = {}
+    for key, val in doc.items():
+        if key not in CONFIG_FILE_KEYS:
+            log.warning("config file: key %r is not allowed in the config file; ignored", key)
+            continue
+        if key in _BIND_KEYS and not _lan_bind_ok(val):
+            log.warning("config file: %s must be an IP literal that is 0.0.0.0, loopback or a private LAN address; ignored", key)
+            continue
+        if isinstance(val, (dict, list)) or val is None or (isinstance(val, bool) and conv[key] is not _bool):
+            log.warning("config file: bad value for %r; ignored", key)
+            continue
+        try:
+            out[key] = val if isinstance(val, bool) else conv[key](str(val) if not isinstance(val, str) else val)
+        except (ValueError, ConfigError):
+            log.warning("config file: bad value for %r; ignored", key)
+    return out
 
 
 class ConfigError(ValueError):
@@ -176,6 +238,20 @@ class Settings:
                 kw[name] = fn(raw)
             except (ValueError, ConfigError) as e:
                 raise ConfigError(f"OPENSEEK_{suffix}: {e}") from None
+        cfg_path = env.get("OPENSEEK_CONFIG_FILE")
+        if cfg_path:
+            by_name = {name: fn for name, fn in conv.values()}
+            accepted: dict = {}
+            for key, val in read_config_file(cfg_path, by_name).items():
+                if key in kw:
+                    continue                     # a real environment variable wins
+                try:
+                    replace(s, **{**accepted, key: val}, **kw).validate()
+                except ConfigError as e:
+                    log.warning("config file: %r rejected (%s)", key, e)
+                    continue
+                accepted[key] = val
+            kw = {**accepted, **kw}
         s = replace(s, **kw)
         if s.allow_public_clients and env.get("OPENSEEK_ALLOW_PUBLIC_CLIENTS_ACK") != "owner-api-is-public":
             raise ConfigError("OPENSEEK_ALLOW_PUBLIC_CLIENTS=1 turns off the owner API's client-address check. Remote access is what the guest "

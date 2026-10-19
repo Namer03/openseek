@@ -53,6 +53,16 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quick start
 
+### Windows: one installer (recommended)
+
+1. Download **`OpenSeekSetup-v0.2.0-Windows-x64.exe`** from the [latest release](https://github.com/obadevyh/openseek/releases/latest) and run it. Windows will ask for administrator approval, and SmartScreen may warn because the installer is not code-signed (check the SHA-256 on the release page, then "More info" > "Run anyway").
+2. That is all. OpenSeek is installed as a background Windows service that starts with Windows, and the **OpenSeek** dashboard opens. No Python, Docker, FFmpeg, PowerShell or configuration files are needed.
+3. To connect a TV, press **Connect a TV** on the dashboard, then enter the address and one-time code it shows into the TV app (same home network).
+
+The installer opens one Windows Firewall rule (this program only, local network only), keeps your data in `C:\ProgramData\OpenSeek` (private to you and the service), never touches your router and never enables internet sharing. Advanced options (ports, bandwidth, cache size, logs, remote sharing, contributor mode) are behind the "Show advanced options" switch in Settings. Details and unattended-install switches: [docs/INSTALL.md](docs/INSTALL.md).
+
+### Manual setup (other platforms, developers)
+
 Requirements: Python 3.12 or newer. FFmpeg libraries come with the `av` (PyAV) wheel; no separate ffmpeg install is needed to run the server (ffmpeg is only used to generate test fixtures).
 
 Windows (PowerShell):

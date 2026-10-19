@@ -235,6 +235,8 @@ def install(shots_dir: str | None = None) -> Path:
 
     core.Config.load = classmethod(lambda cls: cfg)
     core.Config.save = lambda self: None
+    core.install_info = lambda: None                          # never read a real installation's state
+    core.is_installed = lambda: False
     core.Admin.call = lambda self, method, path, json_body=None: srv.call(method, path, json_body)
     core.api_health = lambda c: {"service": "openseek", "demo": True}
     core.server_processes = lambda c: [object(), object()]

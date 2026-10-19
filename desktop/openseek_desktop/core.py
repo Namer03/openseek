@@ -34,8 +34,178 @@ def admin_headers(data_dir: str) -> dict:
     return {"X-OpenSeek-Admin": tok}
 
 
+# --------------------------------------------------------------------------------------------- installed mode
+# The Windows installer sets OpenSeek up as a service and writes %ProgramData%\OpenSeek\install.json (readable by the installing user):
+# {"service": "OpenSeek", "data_dir": "...", "config_file": "...\\config.json", "version": "0.2.0"}. Without it (portable ZIP, manual
+# setups) the app behaves exactly as before.
+PROGRAMDATA = Path(os.environ.get("OPENSEEK_PROGRAMDATA") or os.environ.get("ProgramData") or r"C:\ProgramData") / "OpenSeek"
+INSTALL_JSON = PROGRAMDATA / "install.json"
+GIB = 1 << 30
+# server settings the desktop may edit in the server's config file (the server only honours this allowlist, see backend/openseek/config.py)
+SERVER_DEFAULTS = {"port": 8787, "admin_port": 8788, "host": "0.0.0.0", "cache_max_bytes": 2 * GIB, "retention_days": 30.0, "bg_mbps": 8.0,
+                   "upstream_rps": 0.0, "workers_per_source": 1, "max_active_sources": 2, "playback_guard": True, "multirange_prefetch": False,
+                   "public_port": 0, "public_bind": "0.0.0.0", "public_host": "", "log_level": "INFO"}
+_SERVER_RULES = {"port": (int, 1024, 65535), "admin_port": (int, 1024, 65535), "cache_max_bytes": (int, 256 << 20, 4096 * GIB),
+                 "retention_days": (float, 1, 3650), "bg_mbps": (float, 0.5, 10000), "upstream_rps": (float, 0, 100),
+                 "workers_per_source": (int, 1, 4), "max_active_sources": (int, 1, 8), "playback_guard": (bool,), "multirange_prefetch": (bool,),
+                 "public_port": (int, 0, 65535), "host": (str,), "public_bind": (str,), "public_host": (str,), "log_level": (str,)}
+
+
+def install_info() -> dict | None:
+    try:
+        j = json.loads(INSTALL_JSON.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    return j if isinstance(j, dict) and j.get("service") and j.get("data_dir") else None
+
+
+def is_installed() -> bool:
+    return install_info() is not None
+
+
+def read_server_config() -> dict:
+    """The server's own config file (installed mode). Missing or unreadable means no overrides: the server's defaults apply."""
+    info = install_info()
+    if not info or not info.get("config_file"):
+        return {}
+    try:
+        j = json.loads(Path(info["config_file"]).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    return j if isinstance(j, dict) else {}
+
+
+def validate_server_config(values: dict) -> dict:
+    """Return the cleaned dict or raise ValueError with a message a person can act on."""
+    import ipaddress
+    out = {}
+    for k, v in values.items():
+        rule = _SERVER_RULES.get(k)
+        if rule is None:
+            raise ValueError(f"unknown setting {k}")
+        typ = rule[0]
+        try:
+            v = (bool(v) if typ is bool else typ(v))
+        except (TypeError, ValueError):
+            raise ValueError(f"{k}: not a valid {typ.__name__}") from None
+        if typ in (int, float) and not rule[1] <= v <= rule[2]:
+            raise ValueError(f"{k} must be between {rule[1]} and {rule[2]}")
+        if k in ("host", "public_bind"):
+            try:
+                ip = ipaddress.ip_address(v)
+            except ValueError:
+                raise ValueError(f"{k}: not an IP address") from None
+            if not (ip.is_unspecified or ip.is_loopback or ip.is_private) or ip.is_link_local:
+                raise ValueError(f"{k} must be 0.0.0.0, this PC (127.0.0.1) or a private network address")
+        if k == "log_level" and v.upper() not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+            raise ValueError("log_level must be DEBUG, INFO, WARNING or ERROR")
+        if k == "log_level":
+            v = v.upper()
+        if k == "public_host" and v and not re.fullmatch(r"[A-Za-z0-9.-]{1,253}:\d{2,5}", v):
+            raise ValueError("public_host must look like name.example.org:443")
+        out[k] = v
+    merged = {**SERVER_DEFAULTS, **read_server_config(), **out}
+    if merged["port"] == merged["admin_port"]:
+        raise ValueError("the server port and the admin port must differ")
+    if merged["public_port"] and merged["public_port"] in (merged["port"], merged["admin_port"]):
+        raise ValueError("the public port must differ from the other ports")
+    return out
+
+
+def write_server_config(values: dict) -> None:
+    """Merge validated values into the server's config file (written in place: the installer grants this file, not its folder, to the user)."""
+    info = install_info()
+    if not info or not info.get("config_file"):
+        raise ValueError("OpenSeek is not installed as a service on this PC")
+    clean = validate_server_config(values)
+    current = read_server_config()
+    current.update(clean)
+    Path(info["config_file"]).write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+
+
+_VIRTUAL_NIC = re.compile(r"vethernet|wsl|virtualbox|vmware|hyper-v|docker|tailscale|zerotier|loopback|bluetooth|vpn|\btap\b|\btun\b|npcap|teredo", re.I)
+_LAN_NETS = None
+
+
+def lan_addresses(preferred: list[str] | None = None) -> list[tuple[str, str]]:
+    """Private IPv4 addresses of this PC (address, adapter name), best first: the one the server reports, then real adapters, then virtual ones."""
+    import ipaddress
+    import socket
+    nets = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+    found: list[tuple[str, str, bool]] = []
+    try:
+        stats = psutil.net_if_stats()
+        for name, addrs in psutil.net_if_addrs().items():
+            st = stats.get(name)
+            if not st or not st.isup:
+                continue
+            for a in addrs:
+                if a.family != socket.AF_INET:
+                    continue
+                try:
+                    ip = ipaddress.ip_address(a.address)
+                except ValueError:
+                    continue
+                if any(ip in n for n in nets):
+                    found.append((a.address, name, bool(_VIRTUAL_NIC.search(name))))
+    except (psutil.Error, OSError):
+        pass
+    pref = list(preferred or [])
+    found.sort(key=lambda t: (t[0] not in pref, t[2], t[0]))
+    return [(ip, name) for ip, name, _ in found]
+
+
+def _sc(*args, timeout: int = 30) -> subprocess.CompletedProcess:
+    return subprocess.run(["sc.exe", *args], capture_output=True, text=True, timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def service_state(name: str) -> str | None:
+    """RUNNING, STOPPED, START_PENDING, STOP_PENDING ... or None when the service does not exist."""
+    try:
+        r = _sc("query", name, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode == 1060:
+        return None
+    m = re.search(r"STATE\s*:\s*\d+\s+(\w+)", r.stdout)
+    return m.group(1) if m else None
+
+
+def _svc_result(r: subprocess.CompletedProcess, ok_msg: str) -> tuple[bool, str]:
+    if r.returncode == 0:
+        return True, ok_msg
+    if r.returncode == 5:
+        return False, ("Windows did not allow this account to control the OpenSeek service. Run the OpenSeek installer again from your own account, "
+                       "or start/stop it from the Windows Services app.")
+    if r.returncode in (1056, 1062):                               # already running / not started
+        return True, ok_msg
+    return False, "Windows reported: " + (r.stdout.strip().splitlines() or [str(r.returncode)])[-1][:160]
+
+
+def service_start(name: str) -> tuple[bool, str]:
+    return _svc_result(_sc("start", name), "Starting OpenSeek...")
+
+
+def service_stop(name: str) -> tuple[bool, str]:
+    return _svc_result(_sc("stop", name), "Stopping OpenSeek...")
+
+
+def service_restart(name: str, wait_s: float = 25.0) -> tuple[bool, str]:
+    """Blocking (run it off the UI thread): stop, wait until stopped, start."""
+    ok, msg = service_stop(name)
+    if not ok:
+        return ok, msg
+    end = time.time() + wait_s
+    while time.time() < end and service_state(name) not in ("STOPPED", None):
+        time.sleep(0.4)
+    return service_start(name)
+
+
 # --------------------------------------------------------------------------------------------- configuration
 def _guess_data_dir() -> str:
+    info = install_info()
+    if info:
+        return info["data_dir"]
     env = os.environ.get("OPENSEEK_DATA_DIR")
     default = str(Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "OpenSeek" / "data")
     for c in (env, default, str(Path.home() / "openseek-data")):
@@ -60,17 +230,31 @@ class Config:
     admin_port: int = 8788
     tray: bool = True
     public_host: str = ""
+    advanced: bool = False          # show logs, sharing controls and server settings
 
     @classmethod
     def load(cls) -> "Config":
         c = cls()
+        saved: dict = {}
         try:
-            for k, v in json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig")).items():      # utf-8-sig: Notepad/PowerShell may add a BOM
+            saved = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))      # utf-8-sig: Notepad/PowerShell may add a BOM
+            for k, v in saved.items():
                 if hasattr(c, k):
                     setattr(c, k, v)
-        except (OSError, ValueError):
+        except (OSError, ValueError, AttributeError):
             pass
+        info = install_info()
+        if not info and "advanced" not in saved:
+            c.advanced = True
+        if info:                                                  # installed as a service: the installer owns these
+            c.data_dir = info["data_dir"]
+            sc = {**SERVER_DEFAULTS, **read_server_config()}
+            c.api_port, c.admin_port = int(sc["port"]), int(sc["admin_port"])
+            c.backend_dir = ""
         return c
+
+    def installed(self) -> bool:
+        return is_installed()
 
     def save(self) -> None:
         CONFIG_PATH.write_text(json.dumps(self.__dict__, indent=2), encoding="utf-8")
@@ -355,7 +539,7 @@ class LogTail:
 
     def latest(self) -> Path | None:
         d = Path(self.cfg.data_dir) / "logs"
-        files = sorted(d.glob("serve-*.err.log"), key=lambda p: p.stat().st_mtime) if d.is_dir() else []
+        files = sorted([*d.glob("serve-*.err.log"), *d.glob("OpenSeek.err.log")], key=lambda p: p.stat().st_mtime) if d.is_dir() else []
         return files[-1] if files else None
 
     def read_new(self, first_bytes: int = 400_000) -> list[LogLine]:

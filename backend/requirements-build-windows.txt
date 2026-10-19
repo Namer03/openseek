@@ -1,0 +1,10 @@
+# Build-only dependencies for the frozen Windows server (backend/build_windows_server.py).
+# Runtime pins are in requirements.txt + requirements-lock.txt (installed alongside, with the lock as constraints).
+# Verified with CPython 3.14.4 (64-bit, Windows).
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+altgraph==0.17.5
+pefile==2024.8.26
+pywin32-ctypes==0.2.3
+packaging==26.3
+setuptools==84.0.0

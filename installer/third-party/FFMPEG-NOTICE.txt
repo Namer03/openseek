@@ -1,0 +1,36 @@
+FFMPEG AND OTHER THIRD-PARTY LIBRARIES
+
+This installer bundles the Windows build of the Python package "av" (PyAV
+18.1.0) and the FFmpeg 8.1.2 libraries that it uses (avcodec, avformat,
+avfilter, avutil, avdevice, swscale, swresample). FFmpeg is a trademark of
+Fabrice Bellard, originator of the FFmpeg project (https://ffmpeg.org).
+
+These FFmpeg libraries were built with --enable-version3 and are linked with
+the GPL-licensed H.264 and H.265 encoders x264 and x265 (GPL-2.0 or later), the
+LGPL-licensed MP3 encoder LAME and libiconv, and other libraries (Opus, dav1d,
+SVT-AV1, libvpx, libwebp, Intel oneVPL, OpenCORE AMR, zlib, and the MinGW
+C/C++ runtime). Because of x264 and x265, the combined FFmpeg libraries are
+distributed under the GNU General Public License, version 3 or later. This is
+compatible with OpenSeek's own licence, the GNU Affero General Public License
+version 3 or later (see GPLv3 section 13 and AGPLv3 section 13). The libraries
+are separate DLL files and are called by OpenSeek only through the PyAV
+package.
+
+This software is based in part on the work of the Independent JPEG Group
+(parts of FFmpeg's libavcodec).
+
+Each component keeps its own licence and copyright notices; the full texts are
+in the "licenses" folder of the installation. No nonfree components are
+included.
+
+SOURCE CODE: the complete corresponding source of all these libraries
+(original archives, patches, build scripts, checksums) is available as
+additional assets of the release this installer came from:
+    https://github.com/obadevyh/openseek/releases/tag/<RELEASE-TAG>
+and at the upstream project sites listed in SOURCE-OFFER.txt. See SOURCE-OFFER.txt
+for the written offer. Requests: https://github.com/obadevyh/openseek/issues
+
+NO WARRANTY: this software is provided without warranty of any kind, to the
+extent permitted by law. Some video and audio formats (for example H.264,
+H.265/HEVC, AAC, MP3, AMR) may be covered by patents in some countries; the
+licences above grant no patent rights for them beyond what each licence states.

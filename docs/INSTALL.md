@@ -4,7 +4,24 @@ OpenSeek needs Python 3.12 or newer (pins in `backend/requirements.txt`). The ff
 Pick a data directory outside the source tree and back it up if you want to keep your pairings and cache: it holds the
 database, the TLS identity (`tls/`), the capability key (`secret.key`) and the thumbnail cache.
 
-## Windows
+## Windows installer (recommended)
+
+`OpenSeekSetup-v0.2.0-Windows-x64.exe` (GitHub releases) installs the server and the desktop dashboard together. It needs administrator approval once.
+
+What it sets up:
+* **The server as a Windows service** named `OpenSeek` (automatic, delayed start; restarts itself after a crash), running as the restricted virtual account `NT SERVICE\OpenSeek` with only the privileges it needs. The program is in `C:\Program Files\OpenSeek`.
+* **Data** in `C:\ProgramData\OpenSeek` (database, cache, TLS certificate, admin secret, logs, `config.json`). Only SYSTEM, Administrators, the service and the Windows user who installed can read it. That user can also start/stop the service, which is how the dashboard's Start/Stop/Restart work without admin rights. Another Windows user who wants the dashboard can run the installer from their own account.
+* **One firewall rule**, "OpenSeek (home network)": TCP, this program only, the server's port only, **local subnet only**, on any network profile (many home networks are classed "Public"). The admin interface listens on 127.0.0.1 only and has no rule. The installer does not change router settings and does not enable internet sharing.
+* **Ports:** 8787 (API) and 8788 (admin, this PC only), or the next free ones (18787, 28787, ...) if something else uses them; the dashboard shows the right address.
+* **Start Menu** entries, an optional desktop shortcut, and a normal uninstaller (Settings > Apps).
+
+Unattended: `OpenSeekSetup-v0.2.0-Windows-x64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART` (add `/PORT=n /ADMINPORT=n` to choose ports). Uninstall: `"C:\Program Files\OpenSeek\unins000.exe" /VERYSILENT` keeps your data; add `/DELETEDATA=1` to remove it as well.
+
+Connecting a TV: open **OpenSeek** from the Start menu and press **Connect a TV**. It shows this PC's home-network address and a one-time pairing code (valid 10 minutes, single use) and tells you when the TV has paired. Nothing changes if you never use remote sharing or Contributor Mode; both are optional and live under "Show advanced options".
+
+Upgrading from the v0.1.0 portable desktop app: install this version; the old app is not needed. Servers set up manually keep working with the new dashboard if you point it at the data folder in Settings, but the installed service and a manually started server must not use the same ports.
+
+## Windows, manual setup from source
 
 ```powershell
 cd backend

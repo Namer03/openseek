@@ -499,6 +499,21 @@ class DashboardPage(QWidget):
         self.banner.setWordWrap(True)
         self.banner.hide()
         lay.addWidget(self.banner)
+        tv = card()
+        tvl = QHBoxLayout(tv)
+        tvl.setContentsMargins(20, 16, 20, 16)
+        tvt = QVBoxLayout()
+        tvt.setSpacing(3)
+        tvt.addWidget(label("Connect a TV", "h2"))
+        tvt.addWidget(label("Pair your TV with this server in a minute. OpenSeek shows the address and a one-time code to enter on the TV.", muted=True, wrap=True))
+        tvl.addLayout(tvt, 1)
+        self.b_tv = QPushButton("Connect a TV")
+        self.b_tv.setObjectName("primary")
+        self.b_tv.setCursor(Qt.PointingHandCursor)
+        self.b_tv.setMinimumHeight(40)
+        self.b_tv.setMinimumWidth(170)
+        tvl.addWidget(self.b_tv)
+        lay.addWidget(tv)
         grid = QGridLayout()
         grid.setSpacing(14)
         self.s_titles, self.s_thumbs, self.s_store, self.s_jobs = Stat("Cached titles"), Stat("Thumbnails"), Stat("Cache storage"), Stat("Active extraction")
@@ -506,6 +521,7 @@ class DashboardPage(QWidget):
             grid.addWidget(s, 0, i)
         lay.addLayout(grid)
         feats = card()
+        self.feats = feats
         fl = QHBoxLayout(feats)
         fl.setContentsMargins(18, 14, 18, 14)
         self.f_guard, self.f_multi, self.f_share, self.f_public = Pill(), Pill(), Pill(), Pill()
@@ -531,6 +547,7 @@ class DashboardPage(QWidget):
         self.b_start.clicked.connect(win.do_start)
         self.b_stop.clicked.connect(win.do_stop)
         self.b_restart.clicked.connect(win.do_restart)
+        self.b_tv.clicked.connect(win.connect_tv)
 
     def update_snapshot(self, s: Snapshot, entries: list[Entry]):
         online = s["online"]
@@ -1168,7 +1185,18 @@ class SharingPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(32, 28, 32, 24)
         lay.setSpacing(14)
-        lay.addWidget(page_header("Sharing & devices", "Let someone you trust borrow your cached thumbnails."))
+        self.h_adv = page_header("Sharing & devices", "Let someone you trust borrow your cached thumbnails.")
+        self.h_simple = page_header("Devices", "The TVs and devices that can use your server.")
+        hrow = QHBoxLayout()
+        hrow.addWidget(self.h_simple)
+        hrow.addWidget(self.h_adv)
+        hrow.addStretch()
+        self.b_tv = QPushButton("Connect a TV")
+        self.b_tv.setObjectName("primary")
+        self.b_tv.setCursor(Qt.PointingHandCursor)
+        self.b_tv.clicked.connect(win.connect_tv)
+        hrow.addWidget(self.b_tv)
+        lay.addLayout(hrow)
         c = card()
         cl = QVBoxLayout(c)
         cl.setContentsMargins(20, 16, 20, 16)
@@ -1198,6 +1226,7 @@ class SharingPage(QWidget):
         self.cinfo = label("", muted=True, wrap=True)
         cl.addWidget(self.cinfo)
         cl.addLayout(r2)
+        self.adv = [c]
         lay.addWidget(c)
         lay.addWidget(label("Devices", "h2"))
         self.devices = QTreeWidget()
@@ -1215,7 +1244,9 @@ class SharingPage(QWidget):
         r3.addWidget(self.b_revoke)
         r3.addStretch()
         lay.addLayout(r3)
-        lay.addWidget(label("Guest contributions in progress", "h2"))
+        self.adv.append(self.b_perm)
+        self.l_cj = label("Guest contributions in progress", "h2")
+        lay.addWidget(self.l_cj)
         self.cjobs = QTreeWidget()
         self.cjobs.setHeaderLabels(["Device", "State", "Progress"])
         self.cjobs.setMaximumHeight(90)
@@ -1224,12 +1255,14 @@ class SharingPage(QWidget):
         self.b_cstop = QPushButton("Stop selected contribution")
         self.b_cstop.setObjectName("danger")
         lay.addWidget(self.b_cstop, 0, Qt.AlignLeft)
-        lay.addWidget(label("Recent invitations", "h2"))
+        self.l_inv = label("Recent invitations", "h2")
+        lay.addWidget(self.l_inv)
         self.invites = QTreeWidget()
         self.invites.setHeaderLabels(["Label", "State", "Expires in", "Attempts left"])
         self.invites.setMaximumHeight(130)
         self.invites.header().setSectionResizeMode(0, QHeaderView.Stretch)
         lay.addWidget(self.invites)
+        self.adv += [self.l_cj, self.cjobs, self.b_cstop, self.l_inv, self.invites]
         self.sharing.toggled.connect(lambda on: self._put("/admin/sharing", {"enabled": on}))
         self.index.toggled.connect(lambda on: self._put("/admin/library", {"metadata_index": on}))
         self.contrib.toggled.connect(self.toggle_contrib)
@@ -1239,6 +1272,13 @@ class SharingPage(QWidget):
         self.b_invite.clicked.connect(self.new_invite)
         self.b_revoke.clicked.connect(self.revoke)
         self.b_unblock.clicked.connect(lambda: (self.win.admin.call("DELETE", "/admin/public/blocks"), self.win.toast("Blocks cleared.")))
+
+    def apply_mode(self, advanced: bool):
+        """Simple: just the devices and Connect a TV. Advanced: sharing, invitations, contributor options."""
+        self.h_adv.setVisible(advanced)
+        self.h_simple.setVisible(not advanced)
+        for w in self.adv:
+            w.setVisible(advanced)
 
     def _put(self, path, body):
         if self._busy:
@@ -1403,7 +1443,17 @@ class SettingsPage(QWidget):
     def __init__(self, win):
         super().__init__()
         self.win = win
-        lay = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        sa = QScrollArea()
+        sa.setWidgetResizable(True)
+        sa.setFrameShape(QFrame.NoFrame)
+        sa.setStyleSheet("QScrollArea { background: transparent; border: none; } QWidget#settingsBody { background: transparent; }")
+        body = QWidget()
+        body.setObjectName("settingsBody")
+        sa.setWidget(body)
+        outer.addWidget(sa)
+        lay = QVBoxLayout(body)
         lay.setContentsMargins(32, 28, 32, 24)
         lay.setSpacing(14)
         lay.addWidget(page_header("Settings"))
@@ -1418,9 +1468,13 @@ class SettingsPage(QWidget):
         self.autostart.setChecked(autostart_enabled())
         al.addWidget(self.tray, 1, 0, 1, 3)
         al.addWidget(self.autostart, 2, 0, 1, 3)
+        self.adv_toggle = Toggle("Show advanced options (logs, sharing and contributor controls, server settings)")
+        self.adv_toggle.setChecked(win.cfg.advanced)
+        al.addWidget(self.adv_toggle, 3, 0, 1, 3)
+        self._al = al
         self.data = QLineEdit(win.cfg.data_dir)
         self.backend = QLineEdit(win.cfg.backend_dir)
-        for r, (cap, w) in enumerate((("OpenSeek data folder (cache, database, logs)", self.data), ("OpenSeek backend folder (to start the server)", self.backend)), start=3):
+        for r, (cap, w) in enumerate((("OpenSeek data folder (cache, database, logs)", self.data), ("OpenSeek backend folder (to start the server)", self.backend)), start=4):
             al.addWidget(label(cap, muted=True), r, 0)
             al.addWidget(w, r, 1)
             b = QPushButton("Browse…")
@@ -1428,8 +1482,17 @@ class SettingsPage(QWidget):
             al.addWidget(b, r, 2)
         save = QPushButton("Save")
         save.setObjectName("primary")
-        al.addWidget(save, 5, 2)
+        al.addWidget(save, 6, 2)
         lay.addWidget(app)
+        self.simple_server = card()
+        ssl_ = QVBoxLayout(self.simple_server)
+        ssl_.setContentsMargins(20, 16, 20, 16)
+        ssl_.addWidget(label("Your server", "h2"))
+        self.svc_text = label("", muted=True, wrap=True)
+        ssl_.addWidget(self.svc_text)
+        lay.addWidget(self.simple_server)
+        self.editor = ServerSettingsCard(win)
+        lay.addWidget(self.editor.box)
         self.server = card()
         sl = QVBoxLayout(self.server)
         sl.setContentsMargins(20, 16, 20, 16)
@@ -1446,12 +1509,36 @@ class SettingsPage(QWidget):
         nl.addWidget(self.diag)
         run = QPushButton("Run diagnostics")
         nl.addWidget(run, 0, Qt.AlignLeft)
+        self.net = net
         lay.addWidget(net)
         lay.addStretch()
+        self.adv_toggle.toggled.connect(self.on_adv)
         save.clicked.connect(self.save)
         run.clicked.connect(self.run_diag)
         self.autostart.toggled.connect(lambda on: set_autostart(on))
         self.tray.toggled.connect(lambda on: (setattr(win.cfg, "tray", on), win.cfg.save()))
+
+    def on_adv(self, on: bool):
+        self.win.cfg.advanced = on
+        self.win.cfg.save()
+        self.win.apply_mode()
+
+    def apply_mode(self):
+        installed, adv = self.win.cfg.installed(), self.win.cfg.advanced
+        self.adv_toggle.blockSignals(True)
+        self.adv_toggle.setChecked(adv)
+        self.adv_toggle.blockSignals(False)
+        for i in range(self._al.count()):                           # the folder pickers belong to manual setups; the installer manages them
+            r = self._al.getItemPosition(i)[0]
+            it = self._al.itemAt(i).widget()
+            if it is not None and r >= 4:
+                it.setVisible(not installed)
+        self.simple_server.setVisible(installed)
+        self.server.setVisible(not installed)
+        self.editor.box.setVisible(installed and adv)
+        self.net.setVisible(adv)
+        if installed and adv:
+            self.editor.load()
 
     def _browse(self, w):
         d = QFileDialog.getExistingDirectory(self, "Choose folder", w.text() or str(Path.home()))
@@ -1465,6 +1552,15 @@ class SettingsPage(QWidget):
         self.win.toast("Saved.")
 
     def update_snapshot(self, s, entries):
+        info = core.install_info()
+        if info:
+            if time.time() - getattr(self, "_svc_t", 0) > 8:
+                self._svc_t, self._svc_state = time.time(), core.service_state(info["service"]) or "not installed"
+            st = self._svc_state
+            addrs = ((s.get("status") or {}).get("server") or {}).get("addresses") or []
+            self.svc_text.setText(f"OpenSeek runs in the background as the Windows service \"{info['service']}\" (currently {st.lower().replace('_', ' ')}) "
+                                  f"and starts with Windows. Address for your TV: {addrs[0] if addrs else '(not available yet)'}, port {self.win.cfg.api_port}. "
+                                  f"Your data (cache, paired devices) is kept in {info['data_dir']}.")
         cfg = dict(((s.get("metrics") or {}).get("config")) or {})
         mx = ((s.get("status") or {}).get("cache") or {}).get("max_bytes")
         if mx:
@@ -1525,6 +1621,266 @@ def set_autostart(on: bool) -> None:
 
 
 # ================================================================================================ main window
+class SvcBridge(QObject):
+    done = Signal(bool, str)
+
+
+class SvcJob(QRunnable):
+    """Run a blocking service-control call off the UI thread."""
+
+    def __init__(self, fn, bridge: SvcBridge):
+        super().__init__()
+        self.fn, self.bridge = fn, bridge
+
+    def run(self):
+        try:
+            ok, msg = self.fn()
+        except Exception as e:  # noqa: BLE001 - never let a worker thread die silently
+            ok, msg = False, f"{type(e).__name__}: {e}"
+        self.bridge.done.emit(ok, msg)
+
+
+class ConnectTVDialog(QDialog):
+    """Show the server address and a one-time pairing code, and confirm when the TV has paired."""
+
+    def __init__(self, win):
+        super().__init__(win)
+        self.win = win
+        self.setWindowTitle("Connect a TV")
+        self.setMinimumWidth(600)
+        self.expires = 0.0
+        self.known: set[str] = set()
+        self.pin = ""
+        self.paired = False
+        self._n = 0
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 22, 26, 20)
+        lay.setSpacing(14)
+        lay.addWidget(page_header("Connect a TV", "Your TV and this PC must be on the same home network (Wi-Fi or cable)."))
+        box = card()
+        g = QGridLayout(box)
+        g.setContentsMargins(20, 16, 20, 16)
+        g.setHorizontalSpacing(16)
+        g.setVerticalSpacing(14)
+        big = "font-size: 30px; font-weight: 700; letter-spacing: 2px;"
+        g.addWidget(label("1", "h2"), 0, 0)
+        g.addWidget(label("On your TV, open the OpenSeek server setting in Nuvio (Settings)."), 0, 1, 1, 2)
+        g.addWidget(label("2", "h2"), 1, 0)
+        g.addWidget(label("Enter this server address", muted=True), 1, 1)
+        self.addr = QLabel("…")
+        self.addr.setStyleSheet(big)
+        self.addr.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        g.addWidget(self.addr, 2, 1)
+        self.port = label("", muted=True)
+        g.addWidget(self.port, 2, 2)
+        self.b_copy = QPushButton("Copy address")
+        g.addWidget(self.b_copy, 1, 2)
+        g.addWidget(label("3", "h2"), 3, 0)
+        g.addWidget(label("Enter this pairing code", muted=True), 3, 1)
+        self.code = QLabel("…")
+        self.code.setStyleSheet(big + " color: " + ACCENT_2 + ";")
+        self.code.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        g.addWidget(self.code, 4, 1)
+        self.count = label("", muted=True)
+        g.addWidget(self.count, 4, 2)
+        self.b_new = QPushButton("Get a new code")
+        g.addWidget(self.b_new, 3, 2)
+        lay.addWidget(box)
+        self.status = label("", wrap=True)
+        lay.addWidget(self.status)
+        self.details = label("", "faint", wrap=True)
+        self.details.hide()
+        lay.addWidget(self.details)
+        row = QHBoxLayout()
+        self.b_details = QPushButton("Technical details")
+        row.addWidget(self.b_details)
+        row.addStretch()
+        b_close = QPushButton("Close")
+        b_close.setObjectName("primary")
+        row.addWidget(b_close)
+        lay.addLayout(row)
+        self.b_copy.clicked.connect(lambda: (QGuiApplication.clipboard().setText(self.addr_text), self.win.toast("Address copied.")))
+        self.b_new.clicked.connect(self.new_code)
+        self.b_details.clicked.connect(lambda: self.details.setVisible(not self.details.isVisible()))
+        b_close.clicked.connect(self.accept)
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.tick)
+        self.addr_text = ""
+        self._show_address()
+        self.new_code()
+        self.timer.start(1000)
+
+    def _show_address(self):
+        st = (self.win.last_snap or {}).get("status") or {}
+        reported = (st.get("server") or {}).get("addresses") or []
+        found = core.lan_addresses(reported)
+        real = [ip for ip, _ in found] or [a for a in reported if not a.startswith("127.")]
+        self.addr_text = real[0] if real else ""
+        self.addr.setText(self.addr_text or "not found")
+        self.port.setText(f"port {self.win.cfg.api_port}")
+        self.others = [f"{ip} ({name})" for ip, name in found][1:]
+        if not self.addr_text:
+            self.status.setText("No home-network address was found. Connect this PC to your router (Wi-Fi or cable) and try again.")
+            self.status.setStyleSheet(f"color: {WARN};")
+
+    def new_code(self):
+        self.paired = False
+        self.status.setStyleSheet("")
+        r = self.win.admin.call("POST", "/admin/pair")
+        if r is None or r.get("_error"):
+            self.code.setText("…")
+            self.count.setText("")
+            self.status.setStyleSheet(f"color: {WARN};")
+            self.status.setText("OpenSeek is not running or its admin interface is unavailable. Close this window, press Start on the dashboard and try again."
+                                if r is None else f"The server refused to open a pairing window ({r.get('_error')}).")
+            return
+        self.code.setText(r["code"])
+        self.expires = time.time() + float(r.get("expires_in_s", 600))
+        self.pin = r.get("spki_pin", "")
+        st = self.win.admin.get("/admin/status") or {}
+        self.known = {d["device_id"] for d in st.get("devices", [])}
+        self.status.setText("Waiting for your TV…  The code works once and expires in 10 minutes.")
+        self.details.setText(f"Server certificate fingerprint (your TV checks it automatically): {self.pin}\n"
+                             + ("Other addresses of this PC: " + ", ".join(self.others) + "\n" if self.others else "")
+                             + "Nothing is opened to the internet. Only devices on your home network can reach the server, and each must pair with a code like this.")
+        self.b_new.setEnabled(True)
+
+    def tick(self):
+        self._n += 1
+        left = int(self.expires - time.time())
+        if self.paired:
+            return
+        if left <= 0 and self.expires:
+            self.count.setText("expired")
+            self.status.setText("This code has expired. Press “Get a new code”.")
+            return
+        if self.expires:
+            self.count.setText(f"valid for {left // 60}:{left % 60:02d}")
+        if self._n % 2 == 0 and self.expires:
+            st = self.win.admin.get("/admin/status")
+            if st and not st.get("_error"):
+                new = [d for d in st.get("devices", []) if d["device_id"] not in self.known]
+                if new:
+                    self.paired = True
+                    self.count.setText("")
+                    self.status.setStyleSheet(f"color: {GOOD}; font-weight: 600;")
+                    self.status.setText(f"✓ Connected: {new[0].get('name', 'your TV')}. You can close this window.")
+
+
+class ServerSettingsCard:
+    """Editable server settings (installed mode, advanced). Writes the server's config file, then restarts the service."""
+
+    def __init__(self, win):
+        self.win = win
+        self.box = card()
+        g = QGridLayout(self.box)
+        g.setContentsMargins(20, 16, 20, 16)
+        g.setVerticalSpacing(10)
+        g.addWidget(label("Server settings", "h2"), 0, 0, 1, 3)
+        g.addWidget(label("Good defaults are already set. Change these only if you know you need to; OpenSeek restarts to apply them.", "faint", wrap=True), 1, 0, 1, 3)
+        self.host = QComboBox()
+        self.fields: dict[str, QLineEdit] = {}
+        rows = [("Listen on", self.host, "Which network the server answers on"),
+                ("Server port", self._edit("port"), "The port your TV connects to"),
+                ("Admin port", self._edit("admin_port"), "This PC only; never reachable from the network"),
+                ("Cache size limit (GB)", self._edit("cache_gb"), "Oldest thumbnails are removed above this"),
+                ("Keep thumbnails for (days)", self._edit("retention_days"), ""),
+                ("Background bandwidth (Mbit/s)", self._edit("bg_mbps"), "Speed used for thumbnails while nothing is playing"),
+                ("Request limit (per second, 0 = none)", self._edit("upstream_rps"), "Politeness limit towards the video host"),
+                ("Workers per title", self._edit("workers_per_source"), "1 to 4"),
+                ("Titles processed at once", self._edit("max_active_sources"), "1 to 8")]
+        r = 2
+        for cap, w, hint in rows:
+            g.addWidget(label(cap, muted=True), r, 0)
+            g.addWidget(w, r, 1)
+            if hint:
+                g.addWidget(label(hint, "faint"), r, 2)
+            r += 1
+        self.guard = Toggle("Pause extraction while something is playing")
+        self.multi = Toggle("Faster multi-range reading (experimental)")
+        g.addWidget(self.guard, r, 0, 1, 3)
+        g.addWidget(self.multi, r + 1, 0, 1, 3)
+        self.log = QComboBox()
+        self.log.addItems(["INFO", "DEBUG", "WARNING", "ERROR"])
+        g.addWidget(label("Log detail", muted=True), r + 2, 0)
+        g.addWidget(self.log, r + 2, 1)
+        g.addWidget(label("Remote sharing (optional, off by default)", "h2"), r + 3, 0, 1, 3)
+        g.addWidget(label("Lets invited friends outside your home use your thumbnails. It needs a router port forward and a host name; read the sharing guide first. "
+                          "Leave both empty to keep everything on your home network.", "faint", wrap=True), r + 4, 0, 1, 3)
+        g.addWidget(label("Public port", muted=True), r + 5, 0)
+        g.addWidget(self._edit("public_port"), r + 5, 1)
+        g.addWidget(label("Public host name", muted=True), r + 6, 0)
+        g.addWidget(self._edit("public_host"), r + 6, 1)
+        g.addWidget(label("for example name.example.org:443", "faint"), r + 6, 2)
+        self.msg = label("", wrap=True)
+        g.addWidget(self.msg, r + 7, 0, 1, 3)
+        row = QHBoxLayout()
+        b_reset = QPushButton("Recommended defaults")
+        self.b_save = QPushButton("Save and restart OpenSeek")
+        self.b_save.setObjectName("primary")
+        row.addWidget(b_reset)
+        row.addStretch()
+        row.addWidget(self.b_save)
+        g.addLayout(row, r + 8, 0, 1, 3)
+        b_reset.clicked.connect(lambda: self.fill(core.SERVER_DEFAULTS))
+        self.b_save.clicked.connect(self.save)
+        self.box.hide()
+
+    def _edit(self, key: str) -> QLineEdit:
+        e = QLineEdit()
+        self.fields[key] = e
+        return e
+
+    def load(self):
+        self.fill({**core.SERVER_DEFAULTS, **core.read_server_config()})
+
+    def fill(self, v: dict):
+        self.host.clear()
+        self.host.addItem("All private networks (recommended)", "0.0.0.0")
+        self.host.addItem("This PC only", "127.0.0.1")
+        for ip, name in core.lan_addresses():
+            self.host.addItem(f"{ip} only ({name})", ip)
+        i = self.host.findData(v.get("host", "0.0.0.0"))
+        self.host.setCurrentIndex(max(i, 0))
+        F = self.fields
+        F["port"].setText(str(v["port"]))
+        F["admin_port"].setText(str(v["admin_port"]))
+        F["cache_gb"].setText(f"{v['cache_max_bytes'] / core.GIB:g}")
+        F["retention_days"].setText(f"{v['retention_days']:g}")
+        F["bg_mbps"].setText(f"{v['bg_mbps']:g}")
+        F["upstream_rps"].setText(f"{v['upstream_rps']:g}")
+        F["workers_per_source"].setText(str(v["workers_per_source"]))
+        F["max_active_sources"].setText(str(v["max_active_sources"]))
+        F["public_port"].setText(str(v.get("public_port", 0)))
+        F["public_host"].setText(v.get("public_host", ""))
+        self.guard.setChecked(bool(v["playback_guard"]))
+        self.multi.setChecked(bool(v["multirange_prefetch"]))
+        self.log.setCurrentText(str(v.get("log_level", "INFO")))
+        self.msg.setText("")
+
+    def save(self):
+        F = self.fields
+        try:
+            vals = {"host": self.host.currentData(), "port": F["port"].text().strip(), "admin_port": F["admin_port"].text().strip(),
+                    "cache_max_bytes": int(float(F["cache_gb"].text().strip()) * core.GIB), "retention_days": F["retention_days"].text().strip(),
+                    "bg_mbps": F["bg_mbps"].text().strip(), "upstream_rps": F["upstream_rps"].text().strip(),
+                    "workers_per_source": F["workers_per_source"].text().strip(), "max_active_sources": F["max_active_sources"].text().strip(),
+                    "playback_guard": self.guard.isChecked(), "multirange_prefetch": self.multi.isChecked(), "log_level": self.log.currentText(),
+                    "public_port": F["public_port"].text().strip() or "0", "public_host": F["public_host"].text().strip()}
+            if int(vals["public_port"]) and not vals["public_host"]:
+                raise ValueError("enter the public host name as well, or set the public port to 0")
+            if vals["public_host"] and not int(vals["public_port"]):
+                raise ValueError("enter a public port as well, or clear the host name")
+            core.write_server_config(vals)
+        except (ValueError, OSError) as e:
+            self.msg.setStyleSheet(f"color: {BAD};")
+            self.msg.setText(f"Not saved: {e}")
+            return
+        self.msg.setStyleSheet(f"color: {GOOD};")
+        self.msg.setText("Saved. Restarting OpenSeek…")
+        self.win.restart_service_async("Settings applied.")
+
+
 NAV = [("Dashboard", 0), ("Library", 1), ("Live activity", 2), ("Logs", 3), ("Sharing", 4), ("Settings", 5)]
 
 
@@ -1591,6 +1947,8 @@ class MainWindow(QMainWindow):
         self.bridge.ready.connect(self._meta_ready)
         self.pool = QThreadPool.globalInstance()
         self.pool.setMaxThreadCount(4)
+        self.svc_bridge = SvcBridge()
+        self.svc_bridge.done.connect(self._svc_done)
         self.poller = Poller(cfg)
         self.poller.snap.connect(self.on_snap)
         self.poller.entries.connect(self.on_entries)
@@ -1605,7 +1963,49 @@ class MainWindow(QMainWindow):
             self.tray.activated.connect(lambda r: self.show_normal() if r == QSystemTrayIcon.Trigger else None)
             self.tray.show()
         self._quit = False
+        self.apply_mode()
         self.go(0)
+        if cfg.installed():
+            QTimer.singleShot(1500, self._ensure_service)
+
+    # ---- simple / advanced
+    def apply_mode(self):
+        adv = self.cfg.advanced
+        self.navs[3].setVisible(adv)                                     # Logs
+        self.navs[4].setText("Sharing && devices" if adv else "Devices")
+        self.share.apply_mode(adv)
+        self.dash.feats.setVisible(adv)
+        self.sett.apply_mode()
+        if not adv and self.stack.currentIndex() == 3:
+            self.go(0)
+
+    # ---- installed (Windows service) helpers
+    def _svc_name(self) -> str:
+        return (core.install_info() or {}).get("service", "OpenSeek")
+
+    def _ensure_service(self):
+        if core.service_state(self._svc_name()) == "STOPPED":
+            self.toast(core.service_start(self._svc_name())[1])
+
+    def restart_service_async(self, done_msg: str):
+        self._svc_msg = done_msg
+        self.toast("Restarting OpenSeek…", 6000)
+        self.pool.start(SvcJob(lambda: core.service_restart(self._svc_name()), self.svc_bridge))
+
+    @Slot(bool, str)
+    def _svc_done(self, ok: bool, msg: str):
+        if ok:
+            self.cfg = Config.load()                                      # ports may have changed
+            self.reload_after_config()
+            self.toast(getattr(self, "_svc_msg", "") or msg)
+        else:
+            self.toast(msg, 8000)
+
+    def connect_tv(self):
+        if not self.last_snap or not self.last_snap.get("online"):
+            QMessageBox.information(self, "Connect a TV", "OpenSeek is not running yet. Wait a few seconds or press Start on the dashboard, then try again.")
+            return
+        ConnectTVDialog(self).exec()
 
     # ---- navigation / feedback
     def go(self, i: int):
@@ -1704,6 +2104,9 @@ class MainWindow(QMainWindow):
 
     # ---- server control
     def do_start(self):
+        if self.cfg.installed():
+            self.toast(core.service_start(self._svc_name())[1])
+            return
         ok, msg = core.start_server(self.cfg, self._public_host())
         self.toast(msg)
 
@@ -1718,6 +2121,9 @@ class MainWindow(QMainWindow):
         if QMessageBox.question(self, "Stop OpenSeek", "Stop the OpenSeek server? Extraction and guest access stop until you start it again. "
                                 "Your cache and pairings are not touched.", QMessageBox.Cancel | QMessageBox.Yes, QMessageBox.Cancel) != QMessageBox.Yes:
             return
+        if self.cfg.installed():
+            self.toast(core.service_stop(self._svc_name())[1])
+            return
         pub = ((self.last_snap or {}).get("sharing") or {}).get("public", {})
         if pub.get("listening") and pub.get("host"):
             self.cfg.public_host = pub["host"]
@@ -1728,6 +2134,9 @@ class MainWindow(QMainWindow):
     def do_restart(self):
         if QMessageBox.question(self, "Restart OpenSeek", "Restart the server? Playback keeps working; thumbnails pause for about 6 seconds.",
                                 QMessageBox.Cancel | QMessageBox.Yes, QMessageBox.Cancel) != QMessageBox.Yes:
+            return
+        if self.cfg.installed():
+            self.restart_service_async("OpenSeek restarted.")
             return
         host = self._public_host()
         if host:
