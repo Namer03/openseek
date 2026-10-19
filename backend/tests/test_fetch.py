@@ -279,7 +279,7 @@ def test_body_phase_timing_is_recorded_per_range_request(tmp_path):
         up.read_range(0, 262_143, got.extend, None)
         b = up.stats.snapshot()["body"]
         assert bytes(got) == data[:262_144] and b["requests"] >= 1 and b["bytes"] >= 262_144
-        assert b["read_s"] > 0 and b["MBps_mean"] > 0 and b["read_ms_p50"] is not None and b["gate_s"] == 0
+        assert up.stats.body_read_s > 0 and b["MBps_mean"] > 0 and b["read_ms_p50"] is not None and b["gate_s"] == 0
         up.close()
     finally:
         o.stop()

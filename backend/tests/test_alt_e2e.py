@@ -293,11 +293,14 @@ def test_cancellation_during_validation_leaves_nothing_running(rig):
 
 def test_offer_is_refused_while_playback_health_is_unknown(rig):
     """No fresh telemetry => the server must not add probe traffic on the playback host, even if the client
-    opted in and the candidate is wanted."""
+    opted in and the candidate is eligible."""
     body = rig.create(LONG, [cand("c1", LONG)])
     pid = body["preview_id"]
-    rig.wait_want(pid)                                              # wanted ...
-    assert rig.offer(pid, "c1", f"ok_{LONG}.mkv") == 409            # ... but refused: no telemetry yet
+    # the server no longer even ASKS for a link without fresh healthy telemetry (see jobs.alt_view), so `want` stays
+    # empty while the job runs, and an unsolicited offer is refused
+    time.sleep(2.0)
+    assert (rig.status(pid).get("alt") or {}).get("want") is None
+    assert rig.offer(pid, "c1", f"ok_{LONG}.mkv") == 409            # refused: no telemetry yet
     assert rig.b_requests(f"ok_{LONG}.mkv") == 0
     rig.telemetry(pid)
     assert wait_for(lambda: rig.offer(pid, "c1", f"ok_{LONG}.mkv") == 202, 20, 0.3)
