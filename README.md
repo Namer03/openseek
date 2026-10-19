@@ -1,5 +1,5 @@
 # OpenSeek
-<img width="2172" height="724" alt="OpenSeek Thumbnail Sharing Banner" src="https://github.com/user-attachments/assets/4e11ddbf-4db0-4097-9cea-74c75081a3e7" />
+<img width="2172" height="724" alt="OpenSeek: self-hosted thumbnail sharing" src="docs/images/banner.png" />
 
 OpenSeek is a free, self-hosted service that generates seek-preview thumbnails (a WebVTT file plus JPEG
 tiles and tile sheets) for video playback. A media client sends the HTTP(S) URL it is playing; OpenSeek reads
