@@ -23,7 +23,8 @@ reference scripts are in `docs/security/poc/`.
   guest API 300, capability URLs 900, unknown routes 30); 20 refused requests in 10 minutes block an address for 15 minutes. Capability URLs are built from `OPENSEEK_PUBLIC_HOST`, not from client headers.
   It shares a process with the extractor, so a flood could slow it; the listener caps concurrency at 64 connections.
 * Plain HTTP is not served on the API ports: a plain-HTTP request to a TLS port gets no content and no redirect. Tests confirm TLS 1.2 and TLS 1.3 handshakes with an AEAD cipher suite.
-  Refusal of TLS 1.0/1.1 relies on the defaults of the Python and OpenSSL build in use (uvicorn is not configured with an explicit minimum) and is not tested here.
+  The TLS 1.2 floor comes from Python itself: a `PROTOCOL_TLS_SERVER` context, which uvicorn uses, refuses anything older since Python 3.10 (this project requires 3.12), and a test pins that. It is not an OpenSSL build default, but it is
+  not set explicitly in OpenSeek's own code either.
 
 ## Authentication
 
@@ -74,6 +75,7 @@ There is no telemetry, update check or other outbound connection except media fe
 * The decoder libraries remain a large native attack surface; containment is process separation and limits, not elimination.
 * A compromised paired device can make the server fetch any public URL within quotas.
 * The guest listener cannot distinguish clients behind one NAT; blocks apply per address. A guest can learn whether a title is cached by looking it up. A live 4-character invitation tag is distinguishable from an unknown one.
+* The owner API builds the capability URLs it returns from the request's `Host` header (a syntactically valid host name only). Only the authenticated client that made the request sees that URL, and the capability itself is bound to the device and preview, not to the host; behind a reverse proxy, make sure it forwards a trustworthy `Host`. The guest listener uses `OPENSEEK_PUBLIC_HOST` instead.
 * Uvicorn has no header-read timeout; slow connections hold a slot until the OS drops them.
 * An observer on the network path to a guest sees DNS lookups, the TLS server name, IP addresses, timing and volume, but not paths, ids, tokens, VTT or JPEG contents.
 * Dependencies are pinned by version, not hash.
@@ -87,7 +89,6 @@ minute per device), the worker environment and priority, and the "no outbound co
 
 Not verified, or verified only in part:
 
-* Refusal of TLS 1.0/1.1 (relies on the Python/OpenSSL defaults; only 1.2 and 1.3 acceptance is tested).
 * The pairing iteration floor for clients: enforced by the client, not by this repository. The client-protocol tests (`test_nuvio_client_protocol.py` and one contribution test) need a checkout of the separate Nuvio Legacy
   client, which is not part of this repository, and are skipped without it.
 * The documents under `docs/security/` (threat model, requirements, abuse tests, contribution design) were written during development. They state requirements and intent. Items marked "Verify" in them may point at

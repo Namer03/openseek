@@ -40,6 +40,8 @@ MAX_REDIRECTS = 5
 MAX_SOURCE_SIZE = 1 << 50          # a Content-Range total above this (1 PiB) is hostile or broken; fingerprint() packs the size in 8 bytes
 MAX_PROXY_RANGE = 8 * 1024 * 1024
 CHUNK = 64 * 1024
+SLOW_GRACE_S = 30.0               # network time any single range request may take regardless of its size ...
+MIN_RATE_BPS = 16 * 1024          # ... plus length / this rate: a slower source is abandoned (slow-drip origins must not pin a thread)
 REDIRECT_CODES = (301, 302, 303, 307, 308)
 DEFAULT_UA = f"OpenSeek/{__version__}"
 _CR_RE = re.compile(r"^bytes (\d+)-(\d+)/(\d+)$")
@@ -504,9 +506,15 @@ class Upstream:
                     gate(n)
                     gate_s += pc() - t
                 t = pc()
-                data = resp.read(n)
+                data = resp.read1(n)       # one network read: read(n) would loop until n bytes arrive and never return to the deadline check
                 read_s += pc() - t
                 if not data:
+                    break
+                if read_s > SLOW_GRACE_S + length / MIN_RATE_BPS:
+                    self._drop_conn()      # too slow overall (slow-drip): treated like a dropped connection
+                    got += len(data)
+                    self.budget.add(len(data))
+                    sink(data)
                     break
                 self.stats.body_progress()
                 self.budget.add(len(data))
