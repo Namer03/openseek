@@ -33,15 +33,30 @@ For a self-hosted network service written by a single maintainer, AGPL-3.0-or-la
 the simplest contribution story matter more, choose Apache-2.0. MIT is acceptable but offers no patent grant. This is an opinion for the maintainer to weigh, not a requirement. Consider a
 short contributor sign-off (DCO) whichever is chosen.
 
+## PyAV and FFmpeg: what it means
+
+PyAV's own code is BSD-3-Clause, but its binary wheels bundle FFmpeg shared libraries, and the inspected Windows wheel carries a GPL build of them (the wheel's metadata lists only PyAV's BSD licence file and
+does not ship the FFmpeg, x264 or x265 licence texts). OpenSeek only decodes media (it never encodes video), but the GPL libraries are still present in the wheel.
+
+* **This repository (source only):** it does not contain or redistribute FFmpeg; `pip install -r backend/requirements.txt` downloads the wheel onto the user's machine. Publishing the source under any of the
+  licences above creates no FFmpeg obligation for the maintainer. Document the dependency (done in this page).
+* **A published Docker image, or any bundle that contains the wheel:** this is redistribution of GPL-licensed binaries. Include the licence texts, make the corresponding source available (a link or written offer
+  for FFmpeg, x264 and x265 at the exact versions), and expect the combined image to be distributed on GPL terms. AGPL-3.0 and GPL-3.0 are compatible with that, Apache-2.0 is compatible with GPL-3.0 (not GPL-2.0-only),
+  and MIT is compatible. The simplest way to avoid taking this on is to publish only the `Dockerfile` and let users build locally, or to build PyAV against an LGPL-only FFmpeg (`pip install av --no-binary av`
+  against system FFmpeg libraries whose build you have checked).
+* **Desktop app:** `desktop/` does not import PyAV. A PyInstaller bundle redistributes PySide6 (LGPL-3.0): ship the LGPL text, state that Qt is used, and keep the libraries replaceable (the one-folder build in
+  `docs/DESKTOP.md` does that; a one-file build is harder to defend).
+* Patent licensing for codecs such as H.264 and HEVC is separate from copyright licensing and is not addressed by any open-source licence. This is not legal advice.
+
 ## Third-party licences to check before release
 
-| Component | Licence (as generally published; verify against the pinned versions) |
+| Component | Licence (as generally published; only PyAV/FFmpeg was inspected against the pinned wheel) |
 |---|---|
 | FastAPI | MIT |
 | uvicorn | BSD-3-Clause |
 | cryptography | Apache-2.0 or BSD-3-Clause |
 | PyAV (`av`) | BSD-3-Clause |
-| FFmpeg libraries bundled in the PyAV wheels | LGPL-2.1+; some wheel builds enable GPL components. Check the exact build of `av==18.1.0` for each platform before distributing a Docker image or a bundled desktop build, and satisfy the notice and source-offer obligations |
+| FFmpeg libraries bundled in the PyAV wheels | **Checked for the Windows wheel of `av==18.1.0`: FFmpeg 8.1.2 built with `--enable-libx264 --enable-libx265 --enable-version3`, i.e. a GPL build (FFmpeg allows libx264 only in GPL builds), plus LAME, Opus, VP8/9, dav1d, SVT-AV1, x264 and x265 DLLs.** The Linux wheel was not inspected; assume the same until checked. See "PyAV and FFmpeg" below |
 | Pillow | HPND (MIT-CMU style) |
 | numpy | BSD-3-Clause (the wheels bundle other libraries with their own notices) |
 | PySide6 (desktop) | LGPL-3.0 / GPL / commercial |
