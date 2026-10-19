@@ -203,7 +203,10 @@ class Extractor:
         self.reader = reader
         try:
             self.c = av.open(reader, mode="r", format=FORMAT_DEMUXER[fmt],
-                             options={"probesize": "262144", "analyzeduration": "500000"})
+                             options={"probesize": "262144", "analyzeduration": "500000",
+                                      # defence in depth: the demuxer is forced and fed from a Python file object, so it must
+                                      # never open any protocol itself (e.g. an external data reference inside a hostile container)
+                                      "protocol_whitelist": "none"})
         except EngineError:
             raise
         except Exception as e:  # noqa: BLE001 - libav error: not a usable container

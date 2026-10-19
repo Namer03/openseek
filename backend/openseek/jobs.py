@@ -810,7 +810,7 @@ class JobManager:
                 if not ex.deleted and ex.error is None:
                     ex.last_activity = now
                     if hints and ex.fp and self.library is not None:
-                        self.library.record(ex.fp, hints, self.size_of(ex.fp))
+                        self.library.record(ex.fp, hints, self.size_of(ex.fp), replace=not ex.contributed)
                     if alt is not None and self.settings.alt_source:
                         if ex.alt is None:
                             ex.alt = alt
@@ -900,7 +900,7 @@ class JobManager:
             target = self._canonical(job, fp)
             target.fp = fp
             if job.hints and self.library is not None:        # no-op unless the owner opted in
-                self.library.record(fp, job.hints, pre.size)
+                self.library.record(fp, job.hints, pre.size, replace=not job.contributed)
             if job.alt is not None and target.alt is None:
                 target.alt = job.alt
             src = self.sources.get(fp)

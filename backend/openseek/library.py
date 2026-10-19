@@ -96,14 +96,14 @@ class Library:
         if purge:
             self.db.purge_release_meta()
 
-    def record(self, fp: str, hints: dict | None, size_bytes: int) -> bool:
+    def record(self, fp: str, hints: dict | None, size_bytes: int, replace: bool = True) -> bool:
         """Remember which title/episode this cache entry is, from the client's own hints. Off => nothing is stored."""
         if not self.enabled() or not hints or not fp:
             return False
         ids = clean_ids(hints.get("imdb_id"), hints.get("tmdb_id"), hints.get("season"), hints.get("episode"))
         if ids is None:
             return False
-        self.db.upsert_release_meta(fp, ids.imdb, ids.tmdb, ids.season, ids.episode, int(size_bytes or 0))
+        self.db.upsert_release_meta(fp, ids.imdb, ids.tmdb, ids.season, ids.episode, int(size_bytes or 0), replace)
         return True
 
     # ------------------------------------------------------------------ lookup (a pure read of the cache)

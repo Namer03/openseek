@@ -103,8 +103,9 @@ class DB:
 
     # ---------------------------------------------------------------- library (cross-release reuse)
     def upsert_release_meta(self, fp: str, imdb: str | None, tmdb: int | None, season: int, episode: int,
-                            size_bytes: int) -> None:
-        self.x("INSERT OR REPLACE INTO release_meta(fp,imdb_id,tmdb_id,season,episode,size_bytes,created) "
+                            size_bytes: int, replace: bool = True) -> None:
+        # replace=False: first writer wins (a guest's contribution must never relabel an existing entry)
+        self.x(("INSERT OR REPLACE" if replace else "INSERT OR IGNORE") + " INTO release_meta(fp,imdb_id,tmdb_id,season,episode,size_bytes,created) "
                "VALUES(?,?,?,?,?,?,?)", (fp, imdb, tmdb, season, episode, size_bytes, time.time()))
 
     def purge_release_meta(self) -> int:

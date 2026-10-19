@@ -37,6 +37,7 @@ log = logging.getLogger("openseek.fetch")
 PROBE_BYTES = 256 * 1024          # preflight Range bytes=0-262143
 FP_BYTES = 64 * 1024              # SR-14 head/tail sample
 MAX_REDIRECTS = 5
+MAX_SOURCE_SIZE = 1 << 50          # a Content-Range total above this (1 PiB) is hostile or broken; fingerprint() packs the size in 8 bytes
 MAX_PROXY_RANGE = 8 * 1024 * 1024
 CHUNK = 64 * 1024
 REDIRECT_CODES = (301, 302, 303, 307, 308)
@@ -310,7 +311,7 @@ def _parse_cr(value: str | None) -> tuple[int, int, int] | None:
     if not m:
         return None
     a, b, total = (int(x) for x in m.groups())
-    if b < a or b >= total:
+    if b < a or b >= total or total > MAX_SOURCE_SIZE:
         return None
     return a, b, total
 
