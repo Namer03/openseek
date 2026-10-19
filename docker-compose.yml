@@ -9,6 +9,10 @@
 # loopback/private address. Never publish it on all interfaces or forward it from your router. The admin listener (8788) is not published at
 # all; use `docker compose exec`. Devices are authenticated by their pairing token; the address check cannot see real client addresses behind
 # Docker's NAT and is not relied on here.
+# Fixed project name: containers, network and volume are named openseek-selfhosted-*, whatever folder you cloned into, so this setup can never
+# adopt, recreate or share the volume of another compose project that happens to be called "openseek".
+name: openseek-selfhosted
+
 services:
   openseek:
     build: .

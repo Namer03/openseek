@@ -273,3 +273,18 @@ def test_a_container_may_be_published_on_loopback_or_a_private_lan_address(value
 def test_a_container_refuses_to_start_when_the_publish_address_is_missing_or_dangerous(value):
     from openseek.hardening import published_on_error
     assert published_on_error(value)                                     # a non-empty reason means: refuse
+
+
+def test_the_compose_file_cannot_collide_with_another_deployment():
+    """A fixed project name and image tag: cloning into a folder called 'openseek' must not adopt or recreate another compose project's
+    container/volume, and the build must not overwrite another deployment's 'openseek:local'."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
+    lines = [ln.split("#")[0].strip() for ln in compose.splitlines()]
+    assert "name: openseek-selfhosted" in lines
+    assert "image: openseek-selfhosted:local" in lines
+    assert "image: openseek:local" not in lines
+    docker = (root / "Dockerfile").read_text(encoding="utf-8")
+    assert "openseek:local" not in docker
+    assert any(ln.startswith("FROM python:") and "@sha256:" in ln for ln in docker.splitlines())
