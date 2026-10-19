@@ -20,6 +20,7 @@ We want OpenSeek to be a welcoming, harassment-free project for everyone who tak
 ## Enforcement
 
 Maintainers may edit, hide or remove comments, issues and contributions that violate this code, and may ban people from the project spaces.
-To report a conduct problem, contact the maintainer through the repository's private channels. A contact address is to be added here by the maintainer.
+To report a conduct problem privately, open a private report from the repository's **Security** tab ("Report a vulnerability") and start the title with "Conduct:", so it is seen only by the maintainers.
+If that is not available, contact the maintainer, [@obadevyh](https://github.com/obadevyh), using the contact options on their GitHub profile. Please do not post conduct reports in public issues.
 
 This code of conduct applies in project spaces and when representing the project in public. It is inspired by the Contributor Covenant.

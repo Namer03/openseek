@@ -132,7 +132,8 @@ There is deliberately no variable that relaxes the outbound destination policy. 
 * Every route except health and pairing needs a device token; data URLs use expiring HMAC capabilities.
 * Outbound fetching is SSRF-hardened: destinations are resolved once, every address must be public, redirects are followed
   by OpenSeek (max 5, re-vetted), and the decoder only reads from a loopback range proxy.
-* Stream URLs and headers are kept in memory and never written to disk or logs; logs redact URLs, tokens and codes.
+* Stream URLs and headers are kept in memory and, by default, not written to disk or logs (tests check this); logs redact URLs, tokens and codes.
+  The opt-in diagnostic `OPENSEEK_CAPTURE_SOURCE_FILE` is the one exception, so leave it unset.
 * The admin interface is loopback only with Host/Origin checks and a CSRF header.
 * The owner API refuses non-private client addresses unless you opt in. The public guest listener is off by default.
 
