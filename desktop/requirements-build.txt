@@ -1,0 +1,18 @@
+# Exact versions used to build the Windows release (CPython 3.14, 64-bit). See build_windows.py.
+# PySide6-Essentials is enough for the app (QtCore, QtGui, QtWidgets); the full PySide6 wheel would pull in WebEngine and other large add-ons.
+PySide6-Essentials==6.12.0
+shiboken6==6.12.0
+httpx==0.28.1
+anyio==4.15.1
+certifi==2026.10.18
+h11==0.16.0
+httpcore==1.0.9
+idna==3.20
+psutil==7.2.2
+Pillow==13.0.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+altgraph==0.17.5
+pefile==2024.8.26
+packaging==26.3
+setuptools==84.0.0
