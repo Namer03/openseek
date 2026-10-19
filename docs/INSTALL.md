@@ -40,7 +40,7 @@ know you want that.
 
 ```sh
 sudo useradd --system --home-dir /var/lib/openseek --create-home --shell /usr/sbin/nologin openseek
-sudo git clone <your copy of this repository> /opt/openseek
+sudo git clone https://github.com/obadevyh/openseek.git /opt/openseek
 cd /opt/openseek/backend
 sudo python3 -m venv .venv && sudo .venv/bin/pip install -r requirements.txt
 ```

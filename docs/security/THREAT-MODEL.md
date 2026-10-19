@@ -5,11 +5,9 @@ subprocesses, Docker or native Windows, on the user's LAN) and its client integr
 (C/SDL, NVIDIA Shield / Android TV, libcurl 8.22 + mbedTLS 3.6.7 dlopen'd per
 `tools/android/deps.sh:10-11`).
 
-Companion documents: `SECURITY-REQUIREMENTS.md` (numbered SR-x, testable), `ABUSE-TESTS.md` (QA list),
-`NUVIO-REVIEW.md` (file:line review of the current C code), `poc/` (localhost-only evidence scripts).
+Companion documents: `SECURITY-REQUIREMENTS.md` (numbered SR-x, testable), `ABUSE-TESTS.md` (QA list), `poc/` (localhost-only evidence scripts).
 
-The architecture docs (Agent A) were not yet written when this was drafted. Endpoint names used here
-(`/v1/pair/*`, `/v1/jobs`, `/v1/sprites/*`) are placeholders. QA maps them to the final API. **A security
+This threat model was written during design. Some endpoint names used here (`/v1/pair/*`, `/v1/jobs`, `/v1/sprites/*`) are draft names; the real routes are in `docs/api/CONTRACT-v1.md`. **A security
 property is defined by the requirement, not by the path name.**
 
 ---
