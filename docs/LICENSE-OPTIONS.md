@@ -56,11 +56,14 @@ does not ship the FFmpeg, x264 or x265 licence texts). OpenSeek only decodes med
 | uvicorn | BSD-3-Clause |
 | cryptography | Apache-2.0 or BSD-3-Clause |
 | PyAV (`av`) | BSD-3-Clause |
-| FFmpeg libraries bundled in the PyAV wheels | **Checked for the Windows wheel of `av==18.1.0`: FFmpeg 8.1.2 built with `--enable-libx264 --enable-libx265 --enable-version3`, i.e. a GPL build (FFmpeg allows libx264 only in GPL builds), plus LAME, Opus, VP8/9, dav1d, SVT-AV1, x264 and x265 DLLs.** The Linux wheel was not inspected; assume the same until checked. See "PyAV and FFmpeg" below |
+| FFmpeg libraries bundled in the PyAV wheels | **Checked for `av==18.1.0`, both the Windows wheel and the Linux `manylinux_2_28_x86_64` wheel (the one the Docker image installs): FFmpeg 8.1.2 built with `--enable-libx264 --enable-libx265 --enable-version3`, i.e. a GPL build (FFmpeg allows libx264 only in GPL builds). Bundled libraries include x264, x265, LAME, Opus, VP8/9, dav1d, SVT-AV1, and on Linux GnuTLS, nettle and gmp (LGPL).** See "PyAV and FFmpeg" below |
 | Pillow | HPND (MIT-CMU style) |
 | numpy | BSD-3-Clause (the wheels bundle other libraries with their own notices) |
 | PySide6 (desktop) | LGPL-3.0 / GPL / commercial |
 | PyInstaller (desktop build tool) | GPL-2.0 with a bootloader exception |
 
-Transitive dependencies (Starlette, Pydantic, anyio and others) were not listed here; generate a full list with a tool such as `pip-licenses` and review it before the first release.
+Runtime dependency closure of `backend/requirements.txt` (read from the installed package metadata of the pinned versions): annotated-doc MIT, annotated-types MIT, anyio MIT, av BSD-3-Clause (bundled FFmpeg: see above),
+cffi MIT-0, click BSD-3-Clause, cryptography Apache-2.0 OR BSD-3-Clause, fastapi MIT, h11 MIT, idna BSD-3-Clause, numpy BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0, opentelemetry-api Apache-2.0, pillow MIT-CMU,
+pycparser BSD-3-Clause, pydantic MIT, pydantic-core MIT, starlette BSD-3-Clause, typing-extensions PSF-2.0, typing-inspection MIT, uvicorn BSD-3-Clause. Apart from the FFmpeg binaries inside the `av` wheel,
+all of them are permissive and compatible with MIT, Apache-2.0 and AGPL-3.0 for the project's own licence. The desktop app adds PySide6 (LGPL-3.0), httpx (BSD), psutil (BSD) and Pillow; PyInstaller (GPL-2.0 with bootloader exception) is a build tool only.
 Distributing the Docker image or a PyInstaller bundle is redistribution of these components and brings their notice requirements with it.
