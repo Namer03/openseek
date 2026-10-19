@@ -126,6 +126,18 @@ All settings are environment variables read at start-up. Invalid values stop the
 There is deliberately no variable that relaxes the outbound destination policy. The authoritative list is
 `backend/openseek/config.py`.
 
+## Desktop app
+
+![OpenSeek Desktop dashboard](docs/images/desktop-dashboard.png)
+
+OpenSeek Desktop (PySide6) manages a running server: dashboard, poster library, live activity, logs, sharing and settings.
+See [docs/DESKTOP.md](docs/DESKTOP.md) for usage, building the .exe and the offline demo mode (`python desktop/run_openseek.py --demo`).
+Screenshots show synthetic sample data only (Blender open movies, CC BY).
+
+| Library | Sharing |
+|---|---|
+| ![Library](docs/images/desktop-library.png) | ![Sharing](docs/images/desktop-sharing.png) |
+
 ## Security summary
 
 * The API is HTTPS only; certificates are self-signed and clients pin the public key. No plain-HTTP API.
