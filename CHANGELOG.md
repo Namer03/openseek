@@ -4,6 +4,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Licence
+* OpenSeek is released under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later); `LICENSE` added and `pyproject.toml` updated. Source code and the Dockerfile are published; prebuilt Docker images are not, because the FFmpeg libraries inside the PyAV wheels are a GPL build.
+
 ### Security
 * The loopback admin API now requires a per-install secret (`<data>/admin.token` or `OPENSEEK_ADMIN_TOKEN`) on every call except the static dashboard page; new `python -m openseek dashboard`. Previously any local process could pair itself as owner.
 * Contributions can no longer overwrite the title ids of an existing cache entry.

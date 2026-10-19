@@ -1,8 +1,8 @@
 # Licence options
 
-No licence has been chosen. Until a `LICENSE` file is added, the code is under default copyright: nobody but the copyright holder may use, copy or distribute it. This page is a neutral
-comparison to help the maintainer decide; it is not legal advice. The development repository's `pyproject.toml` declares `GPL-3.0-or-later`, and the development repository carried GPL-3.0; that
-metadata should be updated to match whatever is chosen.
+**Decision: the maintainer chose AGPL-3.0-or-later on 2026-10-19** (the `LICENSE` file is in the repository root). This page records the comparison that
+informed the choice and the third-party licensing notes; it is not legal advice. Prebuilt Docker images are deliberately not published, because the FFmpeg
+libraries inside the PyAV wheels are a GPL build (see "PyAV and FFmpeg" below): the project publishes the source code and the Dockerfile, and users build the image themselves.
 
 ## Comparison
 

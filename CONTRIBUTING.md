@@ -47,3 +47,8 @@ the repository, tests or issues. Use generated or clearly licensed media and pla
 ## Licence
 
 The project licence has not been chosen yet (see `docs/LICENSE-OPTIONS.md`). Do not submit code you do not have the right to contribute.
+
+## Licence
+
+OpenSeek is licensed under the GNU Affero General Public License v3.0 or later (see `LICENSE`). By submitting a contribution you confirm that you have the right to
+submit it and that it may be distributed under that licence.

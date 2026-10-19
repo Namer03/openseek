@@ -6,8 +6,8 @@ tiles and tile sheets) for video playback. A media client sends the HTTP(S) URL 
 only small parts of the file with HTTP range requests, decodes frames around the scrub position, and serves the
 previews through short-lived capability URLs.
 
-Status: version 0.1.0, first public release. See [Status and limitations](#status-and-limitations).
-LICENSE: to be chosen by the maintainer (see [docs/LICENSE-OPTIONS.md](docs/LICENSE-OPTIONS.md)). Until a licence file is added, no licence is granted.
+Status: version 0.1.0, an initial experimental release. See [Status and limitations](#status-and-limitations).
+License: [AGPL-3.0-or-later](LICENSE).
 
 ## Features
 
@@ -174,13 +174,26 @@ See [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md).
 
 A client for a Nuvio Legacy fork exists as a separate project maintained elsewhere. Any client can use the documented HTTP API.
 
+## License
+
+OpenSeek is free software, licensed under the **GNU Affero General Public License, version 3 or (at your option) any later version** (AGPL-3.0-or-later);
+see [LICENSE](LICENSE). Copyright (C) 2026 the OpenSeek authors. You may use, study, change and share it. If you run a modified version for other people
+over a network, the AGPL (section 13) requires you to offer those users the corresponding source.
+
+OpenSeek's Python dependencies are permissively licensed, except that the `av` (PyAV) wheels bundle FFmpeg libraries built with GPL components; they are
+downloaded onto your machine when you install the requirements and are not part of this repository. For that reason **this project publishes source code and a
+Dockerfile only, not prebuilt Docker images**; build the image yourself with `docker compose up -d --build`. Details: [docs/LICENSE-OPTIONS.md](docs/LICENSE-OPTIONS.md).
+
 ## Status and limitations
 
-* Early release. Tested with local synthetic fixtures and a benchmark harness (`bench/`); behaviour against every real-world
-  CDN, release type or client has not been verified.
+* Initial experimental release. It has an automated test suite and was put through an adversarial pre-release review (see
+  [docs/security/PRE-RELEASE-REVIEW.md](docs/security/PRE-RELEASE-REVIEW.md), including what could not be tested), but it has **not** been independently
+  audited or security-certified. It is built for a trusted home network: keep the owner API off the internet and use the guest listener for remote devices.
+  Behaviour against every real-world CDN, release type or client has not been verified.
 * MP4 files without a usable index (fragmented, no `mfra`) are not detected up front; the byte budget bounds the cost.
 * Worker memory is bounded only by container or OS limits; extraction runs in a separate process but is not OS-sandboxed.
 * Pairing is password-authenticated key confirmation, not a PAKE.
-* Dependencies are pinned by version, not by hash; `pip-audit` is not wired up.
+* Dependencies are pinned by version (`backend/requirements-lock.txt`), not by hash; `pip-audit` is not wired up.
+* No prebuilt Docker images are published (see License); build from the Dockerfile.
 * The desktop app is Windows only. The server is developed on Windows and tested in Linux containers.
 * Access logs record client IPs and request times and are not rotated by OpenSeek.
