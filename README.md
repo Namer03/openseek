@@ -25,6 +25,8 @@ License: [AGPL-3.0-or-later](LICENSE).
 * Optional public guest listener (off by default): invite-only, deny-by-default, per-address rate limits and blocks.
 * Contributor Mode (off by default): trusted guests may contribute thumbnails from their own link, under an
   allowlisted-host, https-only, SSRF-safe policy and a work-conserving scheduler that yields to the owner.
+* OpenSeek Cloud (`backend/openseek/cloud/`): the same engine on Vercel or any Docker host, with Upstash Redis and
+  Cloudflare R2 or Cloudinary. See [docs/CLOUD.md](docs/CLOUD.md).
 * Desktop app (`desktop/`, PySide6, Windows): dashboard, poster library, live activity, logs, sharing, settings.
   See [docs/DESKTOP.md](docs/DESKTOP.md).
 
@@ -60,6 +62,14 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 3. To connect a TV, press **Connect a TV** on the dashboard, then enter the address and one-time code it shows into the TV app (same home network).
 
 The installer opens one Windows Firewall rule (this program only, local network only), keeps your data in `C:\ProgramData\OpenSeek` (private to you and the service), never touches your router and never enables internet sharing. Advanced options (ports, bandwidth, cache size, logs, remote sharing, contributor mode) are behind the "Show advanced options" switch in Settings. Details and unattended-install switches: [docs/INSTALL.md](docs/INSTALL.md).
+
+### Cloud: no PC needed
+
+OpenSeek Cloud runs the same engine on Vercel's free plan (or any Docker host with HTTPS), with Upstash Redis for
+devices and Cloudflare R2 or Cloudinary for the thumbnails. Import the repository on [vercel.com/new](https://vercel.com/new)
+with **Root Directory** `backend`, connect Upstash, add your R2 or Cloudinary keys plus `OPENSEEK_CLOUD_SECRET` and
+`OPENSEEK_ADMIN_PIN`, deploy, then open `/configure` to show a pairing code for the TV. Step by step, limits and the
+differences from the self-hosted server: [docs/CLOUD.md](docs/CLOUD.md).
 
 ### Manual setup (other platforms, developers)
 
@@ -175,6 +185,7 @@ See [docs/RESPONSIBLE-USE.md](docs/RESPONSIBLE-USE.md).
 ## Documentation
 
 * [docs/INSTALL.md](docs/INSTALL.md): Windows, Linux, Docker, exposing the guest listener
+* [docs/CLOUD.md](docs/CLOUD.md): OpenSeek Cloud on Vercel or a Docker host
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 * [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)
 * [docs/api/CONTRACT-v1.md](docs/api/CONTRACT-v1.md) and `backend/openapi.json`: the HTTP API, for client authors

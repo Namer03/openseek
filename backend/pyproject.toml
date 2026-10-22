@@ -19,7 +19,11 @@ dependencies = [
 openseek = "openseek.cli:main"
 
 [tool.setuptools]
-packages = ["openseek"]
+packages = ["openseek", "openseek.cloud"]
+
+# OpenSeek Cloud on Vercel (project root directory: backend). See docs/CLOUD.md.
+[tool.vercel]
+entrypoint = "openseek.cloud.vercel:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

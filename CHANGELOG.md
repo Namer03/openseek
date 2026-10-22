@@ -4,6 +4,9 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## [Unreleased]
 
+### Added
+* **OpenSeek Cloud** (`backend/openseek/cloud/`, `docs/CLOUD.md`): the same engine on Vercel (serverless, free plan) or any Docker host (`Dockerfile.cloud`, `python -m openseek cloud`). Devices, pairing and the tile index live in Upstash Redis; tiles in Cloudflare R2 or Cloudinary. Extraction is driven by the client's priority calls and status polls, one frame in flight per source across instances. Stream links are stored only AES-GCM encrypted. Owner page `/configure` (PIN) for pairing codes, device tokens and status. Pairing answers `"spki_pin": "ca"`: clients use the platform's certificate instead of a pin. The self-hosted server is unchanged.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added

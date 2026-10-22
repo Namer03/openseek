@@ -1,0 +1,34 @@
+# OpenSeek Cloud as a container, for any Docker host with HTTPS in front (Hugging Face Spaces, Render, Google Cloud Run,
+# Fly.io, ...). The host terminates TLS; this container serves plain HTTP on $PORT. See docs/CLOUD.md.
+#
+#   docker build -f Dockerfile.cloud -t openseek-cloud .
+#   docker run -p 8080:8080 -e OPENSEEK_CLOUD_SECRET=... -e OPENSEEK_ADMIN_PIN=... openseek-cloud
+#
+# python:3.12-slim pinned by digest (multi-arch index); bump deliberately to take OS security updates
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    OPENSEEK_DATA_DIR=/data \
+    PORT=8080
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY backend/requirements.txt backend/requirements-lock.txt /app/
+RUN pip install -r /app/requirements.txt -c /app/requirements-lock.txt
+
+COPY backend/openseek /app/openseek
+
+RUN useradd --system --uid 10001 --home-dir /data --shell /usr/sbin/nologin openseek \
+ && mkdir -p /data && chown openseek:openseek /data
+USER openseek
+
+EXPOSE 8080
+HEALTHCHECK --interval=60s --timeout=10s --start-period=20s --retries=3 \
+  CMD ["python", "-c", "import os,urllib.request as u; u.urlopen('http://127.0.0.1:%s/v1/health' % os.environ.get('PORT','8080'), timeout=5)"]
+
+CMD ["python", "-m", "openseek", "cloud"]

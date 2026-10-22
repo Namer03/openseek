@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -38,7 +39,17 @@ def main(argv: list[str] | None = None) -> int:
     rv.add_argument("device_id")
     oa = sub.add_parser("openapi", help="write the API's OpenAPI document")
     oa.add_argument("path")
+    cl = sub.add_parser("cloud", help="run OpenSeek Cloud (plain HTTP behind the host's TLS; see docs/CLOUD.md)")
+    cl.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    cl.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     a = ap.parse_args(argv)
+    if a.cmd == "cloud":
+        import uvicorn
+
+        from .cloud.app import create_cloud_app
+        uvicorn.run(create_cloud_app(), host=a.host, port=a.port, proxy_headers=False, server_header=False,
+                    access_log=False)
+        return 0
     try:
         settings = Settings.from_env()
     except ConfigError as e:

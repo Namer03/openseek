@@ -31,7 +31,10 @@ from pathlib import Path
 PACKAGE_PARENT = str(Path(__file__).resolve().parent.parent)
 # -I: isolated mode (ignores PYTHON* env vars, user site and the CWD); the package dir is
 # passed explicitly instead.
-_BOOT = "import sys; sys.path.insert(0, sys.argv[1]); from openseek.worker import main; main()"
+_BOOT = "import sys; sys.path[0:0] = sys.argv[1:]; from openseek.worker import main; main()"
+# Extra import roots for the isolated child. Empty for the self-hosted server; the cloud runtime adds the
+# directories that hold av/numpy/PIL, because platforms like Vercel put them on PYTHONPATH, which -I ignores.
+EXTRA_PATHS: list[str] = []
 
 
 # ===================================================================== child
@@ -143,7 +146,7 @@ def worker_argv() -> list[str]:
     argument (see run_server.py); otherwise an isolated interpreter running the bootstrap."""
     if getattr(sys, "frozen", False):
         return [sys.executable, "--openseek-worker"]
-    return [sys.executable, "-I", "-c", _BOOT, PACKAGE_PARENT]
+    return [sys.executable, "-I", "-c", _BOOT, PACKAGE_PARENT, *EXTRA_PATHS]
 
 
 def _child_env() -> dict[str, str]:
